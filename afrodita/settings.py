@@ -41,11 +41,13 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
-    "usuarios",
-    "productos",
-    "clientes",
-    "ventas",
-    "compras"
+    "rest_framework_simplejwt",
+    "apps.usuarios",
+    "apps.productos",
+    "apps.clientes",
+    "apps.ventas",
+    "apps.compras",
+    "apps.autenticacion",
 ]
 
 MIDDLEWARE = [
@@ -124,7 +126,6 @@ TIME_ZONE = "America/La_Paz"
 USE_I18N = True
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
@@ -146,5 +147,6 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
 }
