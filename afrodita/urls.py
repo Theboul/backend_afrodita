@@ -23,9 +23,11 @@ router = DefaultRouter()
 router.register('clientes', ClienteViewSet)
 
 urlpatterns = [
+    #path("", LoginView.as_view(), name="root_login")
     path('admin/', admin.site.urls),
     path("api/auth/", include("apps.autenticacion.urls")), 
     path("api/", include("apps.usuarios.urls")),
+    path('api/categoria/', include('apps.categoria.urls')),
     path("api/productos/", include("apps.productos.urls")),
     path("api/clientes/", include("apps.clientes.urls")),
     path('api/', include(router.urls)),

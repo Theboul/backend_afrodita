@@ -21,7 +21,7 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Credenciales incorrectas.")
 
         if usuario.estado_usuario != "ACTIVO":
-            raise serializers.ValidationError("La cuenta no está activa.")
+            raise serializers.ValidationError("La cuenta NO está activa.")
 
         data["usuario"] = usuario
         return data

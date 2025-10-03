@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+from datetime import timedelta
 from pathlib import Path
 import os
 
@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "rest_framework_simplejwt.token_blacklist",
     'corsheaders',
     'rest_framework',
     "rest_framework_simplejwt",
@@ -47,7 +48,9 @@ INSTALLED_APPS = [
     "apps.clientes",
     "apps.ventas",
     "apps.compras",
-    "apps.autenticacion",
+    "apps.autenticacion.apps.AutenticacionConfig",
+    "apps.bitacora",
+    "apps.categoria",
 ]
 
 MIDDLEWARE = [
@@ -142,11 +145,11 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
+        #"rest_framework.permissions.IsAuthenticated",
         "rest_framework.permissions.AllowAny",
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
 }
