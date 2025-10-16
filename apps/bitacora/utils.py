@@ -1,51 +1,126 @@
 # apps/bitacora/utils.py
+"""
+Utilidades adicionales para la bitácora.
+Funciones de conveniencia para casos específicos.
+"""
 import logging
-import traceback
-from django.db import connection, transaction
+from apps.bitacora.services.logger import AuditoriaLogger
 
 logger = logging.getLogger(__name__)
 
-def _execute_insert(params):
-    
-    sql = "INSERT INTO bitacora (accion, descripcion, ip, id_usuario) VALUES (%s, %s, %s, %s)"
-    try:
-        # normalizar a tupla (psycopg2 acepta lista también, pero por precaución)
-        params_tuple = tuple(params)
-        with connection.cursor() as cur:
-            cur.execute(sql, params_tuple)
-    except Exception as exc:
-        # registramos el SQL + params para debugging
-        logger.error("Error al insertar en bitacora: %s", exc)
-        logger.error("SQL: %s", sql)
-        logger.error("Params: %r", params)
-        logger.error("Traceback:\n%s", traceback.format_exc())
-        # No volver a lanzar la excepción para que la vista no devuelva 500 por este fallo.
-        # Si prefieres que falle para detectarlo en desarrollo, puedes re-raise aquí.
-        return
 
-def log_activity(accion: str, descripcion: str = None, request=None, user_id=None):
+def log_search_activity(query, ip=None, usuario=None):
+    """
+    Registra búsquedas realizadas por usuarios (registrados o anónimos).
     
-    # extraer IP (si existe)
+    Args:
+        query (str): Término de búsqueda
+        ip (str): IP del usuario
+        usuario (Usuario, optional): Usuario si está logueado
+    """
+    if usuario:
+        accion = "SEARCH"
+        descripcion = f"Búsqueda realizada: '{query}'"
+    else:
+        accion = "ANONYMOUS_SEARCH"
+        descripcion = f"Búsqueda anónima: '{query}'"
+    
+    return AuditoriaLogger.registrar_evento(
+        accion=accion,
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+def log_product_interaction(producto_id, accion_tipo, ip=None, usuario=None):
+    """
+    Registra interacciones específicas con productos.
+    
+    Args:
+        producto_id (int): ID del producto
+        accion_tipo (str): 'view', 'add_to_cart', 'purchase', etc.
+        ip (str): IP del usuario
+        usuario (Usuario, optional): Usuario si está logueado
+    """
+    if usuario:
+        accion = "PRODUCT_VIEW" if accion_tipo == 'view' else "PRODUCT_INTERACTION"
+        descripcion = f"Usuario {usuario.nombre_usuario} - {accion_tipo} producto ID: {producto_id}"
+    else:
+        accion = "ANONYMOUS_PRODUCT_VIEW"
+        descripcion = f"Usuario anónimo - {accion_tipo} producto ID: {producto_id}"
+    
+    return AuditoriaLogger.registrar_evento(
+        accion=accion,
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+def log_error_event(error_type, error_message, request=None, usuario=None):
+    """
+    Registra errores del sistema en la bitácora.
+    
+    Args:
+        error_type (str): '404', '500', 'validation', etc.
+        error_message (str): Mensaje del error
+        request (HttpRequest, optional): Request para obtener IP y ruta
+        usuario (Usuario, optional): Usuario si está disponible
+    """
     ip = None
-    if request is not None:
-        try:
-            xff = request.META.get('HTTP_X_FORWARDED_FOR')
-            ip = (xff.split(',')[0].strip()) if xff else request.META.get('REMOTE_ADDR')
-        except Exception:
-            ip = None
+    ruta = ""
+    
+    if request:
+        ip = _get_client_ip(request)
+        ruta = request.path
+    
+    if error_type == '404':
+        accion = "ERROR_404"
+    elif error_type == '500':
+        accion = "ERROR_500"
+    else:
+        accion = "SYSTEM_ERROR"
+    
+    descripcion = f"Error en {ruta or 'sistema'}: {error_message}"
+    
+    return AuditoriaLogger.registrar_evento(
+        accion=accion,
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
 
-    # normalizar descripcion a str (evita pasar objetos raros)
-    if descripcion is not None:
-        try:
-            descripcion = str(descripcion)
-        except Exception:
-            descripcion = None
 
-    params = [accion, descripcion, ip, user_id]
+def log_dashboard_activity(seccion, ip=None, usuario=None):
+    """
+    Registra actividad específica del dashboard.
+    
+    Args:
+        seccion (str): Sección del dashboard visitada
+        ip (str): IP del usuario
+        usuario (Usuario, optional): Usuario si está logueado
+    """
+    if usuario:
+        accion = "DASHBOARD_ACCESS"
+        descripcion = f"Usuario {usuario.nombre_usuario} accedió a dashboard: {seccion}"
+    else:
+        accion = "ANONYMOUS_VIEW"
+        descripcion = f"Usuario anónimo accedió a dashboard: {seccion}"
+    
+    return AuditoriaLogger.registrar_evento(
+        accion=accion,
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
 
-    # Insertar después del commit (si hay transaction), con manejo de excepción dentro de _execute_insert
-    try:
-        transaction.on_commit(lambda: _execute_insert(params))
-    except Exception:
-        # En raros casos (si no hay transacción o falló on_commit) intentamos insertar inmediatamente
-        _execute_insert(params)
+
+def _get_client_ip(request):
+    """Obtiene la IP real del cliente considerando proxys."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip

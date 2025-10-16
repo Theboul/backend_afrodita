@@ -1,124 +1,182 @@
-import logging
-from django.shortcuts import render
-
-from django.contrib.auth import login as django_login, logout as django_logout
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-
-from rest_framework.views import APIView
+#autenticacion/views.py
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from django.contrib.auth.hashers import check_password
+from django.utils import timezone
 
-from apps.clientes.models import Usuarios, Cliente
-from apps.usuarios.models import Vendedor, Administrador
-from apps.bitacora.utils import log_activity
+from apps.autenticacion.models import LoginAttempt
+from .serializers import LoginSerializer, RefreshTokenSerializer
+from .utils.jwt_manager import JWTManager
+from .utils.throttling import LoginRateThrottle
+from apps.bitacora.signals import (
+    login_exitoso, login_fallido, logout_realizado, logout_error
+)
+import logging
 
 logger = logging.getLogger(__name__)
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([LoginRateThrottle])
+def login_usuario(request):
+    """
+    Endpoint para autenticación de usuarios.
+    Protegido contra fuerza bruta con rate limiting.
+    """
+    serializer = LoginSerializer(data=request.data)
 
-@method_decorator(csrf_exempt, name="dispatch")
-class LoginView(APIView):
-    permission_classes = []  # público
+    if serializer.is_valid():
+        usuario = serializer.validated_data["usuario"]
+        ip_address = obtener_ip_cliente(request)
 
-    def post(self, request):
-        try:
-            login_id = (request.data.get("login") or "").strip()
-            password = request.data.get("password")
+        # Generar tokens JWT
+        tokens = JWTManager.generar_tokens(usuario)
 
-            if not login_id or not password:
-                # no intentar log_activity que a veces falla por esquema DB
-                try:
-                    log_activity('LOGIN_FAIL', descripcion='Login sin credenciales completas', request=request, user_id=None)
-                except Exception:
-                    logger.exception("log_activity fallo al registrar LOGIN_FAIL (incompleto).")
-                return Response({"error": "Debe ingresar usuario/correo y contraseña."},
-                                status=status.HTTP_400_BAD_REQUEST)
+        # Actualizar último acceso
+        usuario.last_login = timezone.now()
+        usuario.save(update_fields=["last_login"])
 
-            # 1. Buscar por correo o username (case-insensitive)
-            usuario = Usuarios.objects.filter(correo__iexact=login_id).first()
-            if not usuario:
-                usuario = Usuarios.objects.filter(nombre_usuario__iexact=login_id).first()
-            if not usuario:
-                try:
-                    log_activity('LOGIN_FAIL', descripcion=f'Intento fallido - usuario no encontrado: {login_id}', request=request, user_id=None)
-                except Exception:
-                    logger.exception("log_activity fallo al registrar LOGIN_FAIL (usuario no encontrado).")
-                return Response({"error": "Credenciales incorrectas."}, status=status.HTTP_401_UNAUTHORIZED)
+        # Registrar intento exitoso
+        LoginAttempt.objects.create(usuario=usuario, ip=ip_address, exitoso=True)
 
-            # 2. Verificar contraseña
-            if not check_password(password, usuario.password):
-                try:
-                    log_activity('LOGIN_FAIL', descripcion=f'Intento fallido - credenciales incorrectas para: {login_id}', request=request, user_id=None)
-                except Exception:
-                    logger.exception("log_activity fallo al registrar LOGIN_FAIL (credenciales incorrectas).")
-                return Response({"error": "Credenciales incorrectas."}, status=status.HTTP_401_UNAUTHORIZED)
+        login_exitoso.send(sender=None, usuario=usuario, ip=ip_address)
 
-            # 3. Verificar estado
-            if usuario.estado_usuario == "BLOQUEADO":
-                try:
-                    log_activity('LOGIN_FAIL', descripcion=f'Intento bloqueo - cuenta bloqueada: {usuario.nombre_usuario}', request=request, user_id=usuario.id_usuario)
-                except Exception:
-                    logger.exception("log_activity fallo al registrar LOGIN_FAIL (bloqueado).")
-                return Response({"error": "La cuenta está bloqueada"}, status=status.HTTP_403_FORBIDDEN)
+        logger.info(f"Login exitoso - Usuario: {usuario.nombre_usuario}, IP: {ip_address}")
 
-            # 4. Crear sesión Django (cookie sessionid)
-            if not hasattr(usuario, "backend"):
-                usuario.backend = "django.contrib.auth.backends.ModelBackend"
-            try:
-                django_login(request, usuario)
-            except ValueError as e:
-                # fallback si algo intenta escribir campos inexistentes (protección adicional)
-                logger.exception("ValueError en django_login (posible last_login faltante): %s", e)
-                # aun así continuamos; la cookie sessionid normalmente ya se estableció
-            except Exception as e:
-                logger.exception("Error al ejecutar django_login: %s", e)
-                try:
-                    log_activity('LOGIN_ERROR', descripcion=f'Error al iniciar sesión: {str(e)}', request=request, user_id=usuario.id_usuario)
-                except Exception:
-                    logger.exception("log_activity fallo al registrar LOGIN_ERROR.")
-                return Response({"error": "Error al iniciar sesión."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Preparar respuesta
+        response = Response({
+            "success": True,
+            "message": f"Bienvenido {usuario.nombre_usuario}",
+            "user": {
+                "id": usuario.id_usuario,
+                "username": usuario.nombre_usuario,
+                "email": usuario.correo,
+                "rol": usuario.id_rol.nombre if hasattr(usuario, 'id_rol') else None,
+            }
+        }, status=status.HTTP_200_OK)
 
-            # 5. Datos extra según rol (igual que antes)
-            extra = {}
-            if usuario.rol == "CLIENTE":
-                cliente = getattr(usuario, "cliente", None)
-                if cliente:
-                    extra["direccion"] = cliente.direccion
-            elif usuario.rol == "VENDEDOR":
-                vendedor = getattr(usuario, "vendedor", None)
-                if vendedor:
-                    extra["fecha_contrato"] = vendedor.fecha_contrato
-                    extra["tipo_vendedor"] = vendedor.tipo_vendedor
-            elif usuario.rol == "ADMINISTRADOR":
-                admin = getattr(usuario, "administrador", None)
-                if admin:
-                    extra["fecha_contrato"] = admin.fecha_contrato
+        # Establecer tokens en cookies seguras
+        return JWTManager.set_tokens_in_cookies(response, tokens)
 
-            # 6. Registrar login en bitácora (si falla, no rompemos el login)
-            try:
-                log_activity('LOGIN', descripcion=f'Login exitoso: {usuario.nombre_usuario}', request=request, user_id=usuario.id_usuario)
-            except Exception:
-                logger.exception("log_activity fallo al registrar LOGIN (no crítico).")
+    # Registrar intento fallido
+    ip_address = obtener_ip_cliente(request)
+    LoginAttempt.objects.create(usuario=None, ip=ip_address, exitoso=False)
 
-            # 7. Respuesta
+    login_fallido.send(sender=None, ip=ip_address, credencial=request.data.get("credencial"))
+    logger.warning(f"Login fallido - IP: {ip_address}")
+
+    return Response({
+        "success": False,
+        "errors": serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def logout_usuario(request):
+    """
+    Endpoint para cerrar sesión.
+    Invalida el refresh token y limpia las cookies.
+    """
+    usuario = request.user
+    ip_address = obtener_ip_cliente(request)
+    try:
+        # Obtener el refresh token desde las cookies
+        refresh_token = JWTManager.get_token_from_cookie(request, "refresh")
+        
+        # Intentar invalidar el token
+        if refresh_token:
+            JWTManager.invalidar_refresh_token(refresh_token)
+        logout_realizado.send(sender=None, usuario=usuario, ip=ip_address)
+        logger.info(f"Logout exitoso - Usuario: {usuario.nombre_usuario}, IP: {ip_address}")
+        
+        response = Response({
+            "success": True,
+            "message": "Sesión cerrada correctamente."
+        }, status=status.HTTP_200_OK)
+        
+        return JWTManager.clear_cookies(response)
+    
+    except Exception as e:
+        logout_error.send(sender=None, usuario=usuario, ip=ip_address, error=str(e))
+        logger.error(f"Error en logout ({usuario.nombre_usuario}): {str(e)}")
+
+        response = Response({
+            "success": True,
+            "message": "Sesión cerrada correctamente."
+        }, status=status.HTTP_200_OK)
+        return JWTManager.clear_cookies(response)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def refresh_token(request):
+    """
+    Endpoint para refrescar el access token usando el refresh token.
+    """
+    try:
+        # Obtener refresh token desde cookies
+        refresh_token = JWTManager.get_token_from_cookie(request, "refresh")
+        
+        serializer = RefreshTokenSerializer(
+            data=request.data,
+            context={'refresh_token': refresh_token}
+        )
+        
+        if not serializer.is_valid():
             return Response({
-                "mensaje": "Inicio de sesión exitoso",
-                "usuario": {
-                    "id": usuario.id_usuario,
-                    "nombre": usuario.nombre_completo,
-                    "rol": usuario.rol
-                },
-                "extra": extra
-            }, status=status.HTTP_200_OK)
+                "success": False,
+                "error": "Refresh token no válido o expirado."
+            }, status=status.HTTP_401_UNAUTHORIZED)
 
-        except Exception as exc:
-            # registramos la traza completa en consola / logs
-            logger.exception("Error inesperado en LoginView.post")
-            # opcional: intentar registrar en bitacora que hubo un error de login
-            try:
-                log_activity('LOGIN_ERROR', descripcion=f'Error inesperado login: {str(exc)}', request=request, user_id=None)
-            except Exception:
-                logger.exception("log_activity fallo al registrar LOGIN_ERROR (no crítico).")
-            return Response({"error": "Error interno al procesar login."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Generar nuevos tokens
+        tokens = JWTManager.validar_y_refrescar_token(
+            serializer.validated_data['refresh']
+        )
+
+        response = Response({
+            "success": True,
+            "message": "Token refrescado correctamente."
+        }, status=status.HTTP_200_OK)
+
+        # Actualizar cookies con nuevos tokens
+        return JWTManager.set_tokens_in_cookies(response, tokens)
+
+    except Exception as e:
+        logger.error(f"Error al refrescar token: {str(e)}")
+        return Response({
+            "success": False,
+            "error": "No se pudo refrescar el token."
+        }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verificar_sesion(request):
+    """
+    Endpoint para verificar si la sesión del usuario es válida.
+    Útil para verificación en el frontend.
+    """
+    return Response({
+        "success": True,
+        "user": {
+            "id": request.user.id,
+            "username": request.user.nombre_usuario,
+            "email": request.user.correo,
+            "rol": request.user.id_rol.nombre if hasattr(request.user, 'id_rol') else None,
+        }
+    }, status=status.HTTP_200_OK)
+
+
+def obtener_ip_cliente(request):
+    """
+    Obtiene la IP real del cliente considerando proxies y balanceadores.
+    """
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip

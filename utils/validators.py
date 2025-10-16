@@ -1,6 +1,6 @@
 import re
 from rest_framework import serializers
-from apps.clientes.models import Usuarios
+from apps.usuarios.models import Usuario
 
 
 def validate_password_strength(password: str) -> str:
@@ -10,7 +10,7 @@ def validate_password_strength(password: str) -> str:
     if len(password) < 8:
         raise serializers.ValidationError("La contraseña debe tener al menos 8 caracteres.")
     if not re.search(r"[A-Z]", password):
-        raise serializers.ValidationError("Debe contener al menos una letra mayúscula.")
+        raise serializers.ValidationError("La contraseña debe contener al menos una letra mayúscula.")
     if not re.search(r"[a-z]", password):
         raise serializers.ValidationError("Debe contener al menos una letra minúscula.")
     if not re.search(r"[0-9]", password):
@@ -25,7 +25,7 @@ def validate_unique_email(correo: str) -> str:
     Verifica que el correo no exista ya en la base de datos.
     """
     correo = correo.lower().strip()
-    if Usuarios.objects.filter(correo=correo).exists():
+    if Usuario.objects.filter(correo=correo).exists():
         raise serializers.ValidationError("El correo ya está registrado.")
     return correo
 
@@ -37,7 +37,7 @@ def validate_unique_username(nombre_usuario: str) -> str:
     nombre_usuario = nombre_usuario.strip()
     if len(nombre_usuario) < 4:
         raise serializers.ValidationError("El nombre de usuario debe tener al menos 4 caracteres.")
-    if Usuarios.objects.filter(nombre_usuario=nombre_usuario).exists():
+    if Usuario.objects.filter(nombre_usuario=nombre_usuario).exists():
         raise serializers.ValidationError("El nombre de usuario ya está en uso.")
     return nombre_usuario
 

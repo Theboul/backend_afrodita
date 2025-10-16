@@ -4,14 +4,26 @@ from django.shortcuts import render
 
 from rest_framework import viewsets, status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from .models import Producto
 from .serializers import ProductoSerializer
 
 class ProductoViewSet(viewsets.ModelViewSet):
     queryset = Producto.objects.all()
     serializer_class = ProductoSerializer
-    permission_classes = [AllowAny]  # cambia a [AllowAny] si quieres abrirlo
+    
+    def get_permissions(self):
+        """
+        Permisos granulares por acción:
+        - GET (list, retrieve): Cualquiera puede ver productos
+        - POST, PUT, PATCH, DELETE: Solo administradores
+        """
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]  # Para dashboard de usuarios anónimos
+        else:
+            permission_classes = [IsAuthenticated, IsAdminUser]  # Solo admins pueden crear/editar/eliminar
+        
+        return [permission() for permission in permission_classes]
 
     def perform_create(self, serializer):
 
