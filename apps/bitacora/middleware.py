@@ -43,7 +43,7 @@ class AuditoriaMiddleware(MiddlewareMixin):
                 ]):
                     # DEBUG: Loguear para verificar que el usuario está autenticado
                     logger.debug(
-                        f"📝 Registrando vista para usuario autenticado: "
+                        f"Registrando vista para usuario autenticado: "
                         f"{request.user.nombre_usuario} -> {request.path}"
                     )
                     
@@ -56,7 +56,7 @@ class AuditoriaMiddleware(MiddlewareMixin):
             else:
                 # Usuario anónimo - solo registrar vistas importantes para analytics
                 if self._es_vista_importante_para_anonimos(path):
-                    logger.debug(f"📝 Registrando vista anónima: {request.path}")
+                    logger.debug(f"Registrando vista anónima: {request.path}")
                     
                     from apps.bitacora.signals import vista_anonima_visitada
                     vista_anonima_visitada.send(
@@ -68,7 +68,7 @@ class AuditoriaMiddleware(MiddlewareMixin):
                     
         except Exception as e:
             # Nunca debe romper el flujo de la vista
-            logger.error(f"❌ Error en AuditoriaMiddleware: {str(e)}")
+            logger.error(f"Error en AuditoriaMiddleware: {str(e)}")
             logger.exception(e)  # Esto loguea el stacktrace completo
 
         return None

@@ -53,7 +53,7 @@ def login_usuario(request):
                 "id": usuario.id_usuario,
                 "username": usuario.nombre_usuario,
                 "email": usuario.correo,
-                "rol": usuario.id_rol.nombre if hasattr(usuario, 'id_rol') else None,
+                "rol": getattr(usuario.id_rol, 'nombre', None),
             }
         }, status=status.HTTP_200_OK)
 
@@ -165,7 +165,7 @@ def verificar_sesion(request):
             "id": request.user.id,
             "username": request.user.nombre_usuario,
             "email": request.user.correo,
-            "rol": request.user.id_rol.nombre if hasattr(request.user, 'id_rol') else None,
+            "rol": getattr(request.user.id_rol, 'nombre', None),
         }
     }, status=status.HTTP_200_OK)
 
