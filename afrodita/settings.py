@@ -35,6 +35,8 @@ INSTALLED_APPS = [
     
     # Third party apps
     'rest_framework',
+    'drf_spectacular',
+    'drf_spectacular_sidecar',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
@@ -156,11 +158,20 @@ STATIC_ROOT = os.path.join(BASE_DIR, "static")
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+SPECTACULAR_SETTINGS = {
+    'TITLE': '🌸 Sistema Afrodita',
+    'DESCRIPTION': 'Documentación interactiva de todos los endpoints del sistema Afrodita.',
+    'VERSION': '1.0.0',
+    'SWAGGER_UI_DIST': 'SIDECAR',
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
 # ==============================================================================
 # REST FRAMEWORK & JWT
 # ==============================================================================
 
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",  # Requiere autenticación por defecto
     ],
@@ -187,6 +198,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10
 }
+
 
 SIMPLE_JWT = {
     # Duración de los tokens

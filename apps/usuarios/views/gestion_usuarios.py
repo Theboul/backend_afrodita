@@ -233,6 +233,57 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         )
         
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+
+    # =======================
+    # VERIFICACIONES EN TIEMPO REAL
+    # =======================
+
+    @action(detail=False, methods=['get'], url_path='verificar_username')
+    def verificar_username(self, request):
+        """Verificar disponibilidad de username"""
+        username = request.GET.get('username')
+        usuario_id = request.GET.get('usuario_id')
+        
+        if not username:
+            return Response({'error': 'Username parameter required'}, status=400)
+        
+        # Buscar si existe el username
+        queryset = Usuario.objects.filter(nombre_usuario=username)
+        
+        # Si estamos editando un usuario, excluirlo de la verificación
+        if usuario_id and usuario_id != 'undefined':
+            try:
+                queryset = queryset.exclude(id_usuario=int(usuario_id))
+            except (ValueError, TypeError):
+                pass
+        
+        existe = queryset.exists()
+        
+        return Response({'disponible': not existe})
+
+    @action(detail=False, methods=['get'], url_path='verificar_email')
+    def verificar_email(self, request):
+        """Verificar disponibilidad de email"""
+        email = request.GET.get('email')
+        usuario_id = request.GET.get('usuario_id')
+        
+        if not email:
+            return Response({'error': 'Email parameter required'}, status=400)
+        
+        # Buscar si existe el email
+        queryset = Usuario.objects.filter(correo=email)
+        
+        # Si estamos editando un usuario, excluirlo de la verificación
+        if usuario_id and usuario_id != 'undefined':
+            try:
+                queryset = queryset.exclude(id_usuario=int(usuario_id))
+            except (ValueError, TypeError):
+                pass
+        
+        existe = queryset.exists()
+        
+        return Response({'disponible': not existe})
 
     # =======================
     # ACCIONES PERSONALIZADAS
