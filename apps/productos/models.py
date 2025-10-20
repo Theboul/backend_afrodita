@@ -1,21 +1,25 @@
 from django.db import models
 
-# Create your models here.
-
-from apps.categoria.models import Categoria
-
+# ==========================================================
+# TABLA: medida
+# ==========================================================
 class Medida(models.Model):
     id_medida = models.AutoField(primary_key=True)
     medida = models.DecimalField(max_digits=4, decimal_places=2)
+    descripcion = models.CharField(max_length=50, null=True, blank=True)
+    unidad = models.CharField(max_length=10, null=True, blank=True)
 
     class Meta:
+        db_table = 'medida'
         managed = False
-        db_table = "medida"
 
     def __str__(self):
-        return str(self.medida)
+        return f"{self.medida} {self.unidad or ''}".strip()
 
 
+# ==========================================================
+# TABLA: configuracion_lente
+# ==========================================================
 class ConfiguracionLente(models.Model):
     id_configuracion = models.CharField(primary_key=True, max_length=5)
     color = models.CharField(max_length=20)
@@ -23,22 +27,23 @@ class ConfiguracionLente(models.Model):
     diametro = models.DecimalField(max_digits=4, decimal_places=2)
     duracion_meses = models.SmallIntegerField()
     material = models.CharField(max_length=15)
-
-    medida = models.ForeignKey(
-        "Medida",
-        db_column="id_medida",
+    id_medida = models.ForeignKey(
+        Medida,
         on_delete=models.CASCADE,
-        related_name="configuraciones"
+        db_column='id_medida'
     )
 
     class Meta:
+        db_table = 'configuracion_lente'
         managed = False
-        db_table = "configuracion_lente"
 
     def __str__(self):
-        return f"{self.id_configuracion} - {self.color} ({self.diametro} mm)"
+        return f"{self.color} ({self.diametro} mm)"
 
 
+# ==========================================================
+# TABLA: producto
+# ==========================================================
 class Producto(models.Model):
     id_producto = models.CharField(primary_key=True, max_length=5)
     nombre = models.CharField(max_length=50)
@@ -46,23 +51,51 @@ class Producto(models.Model):
     stock = models.IntegerField()
     descripcion = models.CharField(max_length=100)
     estado_producto = models.CharField(max_length=10)
-
-    configuracion = models.ForeignKey(
+    id_configuracion = models.ForeignKey(
         ConfiguracionLente,
-        db_column="id_configuracion",
-        on_delete=models.CASCADE,
-        related_name="productos"
+        on_delete=models.SET_NULL,
+        null=True,
+        db_column='id_configuracion'
     )
-    categoria = models.ForeignKey(
-        Categoria,
-        db_column="id_categoria",
+    id_categoria = models.ForeignKey(
+        'categoria.Categoria',
         on_delete=models.CASCADE,
-        related_name="productos"
+        db_column='id_categoria',
+        related_name='productos'
     )
 
     class Meta:
+        db_table = 'producto'
         managed = False
-        db_table = "producto"
+        ordering = ['nombre']
 
     def __str__(self):
-        return f"{self.nombre} ({self.id_producto})"
+        return self.nombre
+
+
+# ==========================================================
+# TABLA: imagen_producto
+# ==========================================================
+class ImagenProducto(models.Model):
+    id_imagen = models.AutoField(primary_key=True)
+    id_producto = models.ForeignKey(
+        Producto,
+        on_delete=models.CASCADE,
+        db_column='id_producto'
+    )
+    url = models.CharField(max_length=255)
+    public_id = models.CharField(max_length=150, null=True, blank=True)
+    formato = models.CharField(max_length=10, null=True, blank=True)
+    es_principal = models.BooleanField(default=False)
+    orden = models.SmallIntegerField(default=1)
+    estado_imagen = models.CharField(max_length=10, default='ACTIVA')
+    subido_por = models.IntegerField(null=True, blank=True)
+    fecha_subida = models.DateTimeField(null=True, blank=True)
+    fecha_actualizacion = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'imagen_producto'
+        managed = False
+
+    def __str__(self):
+        return f"Imagen de {self.id_producto_id} ({self.url})"

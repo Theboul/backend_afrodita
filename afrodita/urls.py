@@ -24,19 +24,23 @@ from drf_spectacular.views import (
 
 
 
+
+
 urlpatterns = [
     #path("", LoginView.as_view(), name="root_login")
     path('admin/', admin.site.urls),
     path("api/auth/", include("apps.autenticacion.urls")),
     path("api/usuarios/", include("apps.usuarios.urls")),
-    path('api/categoria/', include('apps.categoria.urls')),
-    path("api/productos/", include("apps.productos.urls")),
+    path('api/', include('apps.categoria.urls')),
+    #path("api/productos/", include("apps.productos.urls")),
     path("api/ventas/", include("apps.ventas.urls")),
     path("api/compras/", include("apps.compras.urls")),
     path("api/bitacora/", include("apps.bitacora.urls")),
 
+
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+
 ]
 

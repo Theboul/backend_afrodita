@@ -1,7 +1,7 @@
 from django.shortcuts import render
 
 # Create your views here.
-
+"""
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
@@ -13,11 +13,11 @@ class ProductoViewSet(viewsets.ModelViewSet):
     serializer_class = ProductoSerializer
     
     def get_permissions(self):
-        """
-        Permisos granulares por acción:
-        - GET (list, retrieve): Cualquiera puede ver productos
-        - POST, PUT, PATCH, DELETE: Solo administradores
-        """
+        
+        #Permisos granulares por acción:
+        #- GET (list, retrieve): Cualquiera puede ver productos
+        #- POST, PUT, PATCH, DELETE: Solo administradores
+        
         if self.action in ['list', 'retrieve']:
             permission_classes = [AllowAny]  # Para dashboard de usuarios anónimos
         else:
@@ -46,3 +46,4 @@ class ProductoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_409_CONFLICT
             )
         return super().destroy(request, *args, **kwargs)
+"""
