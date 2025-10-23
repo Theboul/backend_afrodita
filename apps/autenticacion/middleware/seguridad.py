@@ -166,31 +166,41 @@ class BruteForceProtectionMiddleware(MiddlewareMixin):
 class SecurityHeadersMiddleware(MiddlewareMixin):
     """
     Middleware para agregar headers de seguridad adicionales.
+    NO sobrescribe headers de CORS que ya están configurados por django-cors-headers.
     """
     def process_response(self, request, response):
-        # Anti clickjacking
-        response["X-Frame-Options"] = "DENY"
+        # Solo agregar headers si no están ya presentes (no sobrescribir CORS)
+        
+        # Anti clickjacking (solo si no está configurado)
+        if "X-Frame-Options" not in response:
+            response["X-Frame-Options"] = "DENY"
 
         # Prevención de MIME sniffing
-        response["X-Content-Type-Options"] = "nosniff"
+        if "X-Content-Type-Options" not in response:
+            response["X-Content-Type-Options"] = "nosniff"
 
         # Protección básica XSS (para navegadores antiguos)
-        response["X-XSS-Protection"] = "1; mode=block"
+        if "X-XSS-Protection" not in response:
+            response["X-XSS-Protection"] = "1; mode=block"
 
         # Política de referer
-        response["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if "Referrer-Policy" not in response:
+            response["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
         # Permissions Policy (reemplaza Feature-Policy)
-        response["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+        if "Permissions-Policy" not in response:
+            response["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
 
-        # Política de contenido (CSP)
-        response["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "font-src 'self';"
-        )
+        # Política de contenido (CSP) - Relajada para permitir recursos externos
+        # NO aplicar CSP restrictivo en API endpoints
+        if not request.path.startswith('/api/') and "Content-Security-Policy" not in response:
+            response["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "font-src 'self';"
+            )
 
         # No cachear páginas sensibles (auth, admin)
         if any(seg in request.path for seg in ["auth", "admin"]):
@@ -199,7 +209,7 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
             response["Expires"] = "0"
 
         # Forzar HTTPS si aplica
-        if request.is_secure():
+        if request.is_secure() and "Strict-Transport-Security" not in response:
             response["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
 
         return response

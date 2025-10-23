@@ -284,8 +284,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8080",
 ]
 
+# Configuraciones críticas para CORS
 CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = False  # Solo permitir orígenes especificados arriba
 
+# Headers permitidos (incluir cookie)
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -296,8 +299,10 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'cookie',  # Importante para cookies
 ]
 
+# Métodos HTTP permitidos
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -306,6 +311,15 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
+
+# Headers que el frontend puede leer
+CORS_EXPOSE_HEADERS = [
+    'Content-Type',
+    'X-CSRFToken',
+]
+
+# Preflight cache (24 horas)
+CORS_PREFLIGHT_MAX_AGE = 86400
 
 # Permitir orígenes confiables para CSRF
 CSRF_TRUSTED_ORIGINS = [
