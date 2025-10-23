@@ -312,14 +312,14 @@ CORS_ALLOW_METHODS = [
 # ==============================================================================
 
 # Cookies de sesión
-SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Strict'
+SESSION_COOKIE_SAMESITE = 'none'
 
 # Cookies CSRF
-CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = False  # JS debe leerlo
-CSRF_COOKIE_SAMESITE = 'Strict'
+CSRF_COOKIE_SAMESITE = 'none'
 
 # Headers de seguridad
 SECURE_BROWSER_XSS_FILTER = True
