@@ -29,6 +29,7 @@ class JWTCookieAuthenticationMiddleware(MiddlewareMixin):
 
         # Ignorar rutas públicas dentro del API
         rutas_excluidas = [
+            "/api/auth/",
             "/api/auth/login/",
             "/api/auth/refresh/",
             "/api/auth/logout/",
