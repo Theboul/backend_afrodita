@@ -74,39 +74,61 @@ def login_usuario(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def logout_usuario(request):
     """
-    Endpoint para cerrar sesión.
-    Invalida el refresh token y limpia las cookies.
+    Endpoint robusto para cerrar sesión.
+    - Limpia cookies aunque el usuario no esté autenticado.
+    - Intenta invalidar el refresh token si existe.
+    - Previene quedar bloqueado en el dashboard por tokens huérfanos.
     """
-    usuario = request.user
+
     ip_address = obtener_ip_cliente(request)
+    usuario = getattr(request, "user", None)
+
     try:
-        # Obtener el refresh token desde las cookies
+        # Intentar obtener el refresh token desde cookies
         refresh_token = JWTManager.get_token_from_cookie(request, "refresh")
-        
-        # Intentar invalidar el token
+
+        # Invalida el token si existe y aún no está blacklisted
         if refresh_token:
             JWTManager.invalidar_refresh_token(refresh_token)
-        logout_realizado.send(sender=None, usuario=usuario, ip=ip_address)
-        logger.info(f"Logout exitoso - Usuario: {usuario.nombre_usuario}, IP: {ip_address}")
-        
-        response = Response({
-            "success": True,
-            "message": "Sesión cerrada correctamente."
-        }, status=status.HTTP_200_OK)
-        
-        return JWTManager.clear_cookies(response)
-    
-    except Exception as e:
-        logout_error.send(sender=None, usuario=usuario, ip=ip_address, error=str(e))
-        logger.error(f"Error en logout ({usuario.nombre_usuario}): {str(e)}")
+            logger.info(f"Refresh token invalidado para IP {ip_address}")
 
-        response = Response({
-            "success": True,
-            "message": "Sesión cerrada correctamente."
-        }, status=status.HTTP_200_OK)
+        # Registrar evento en bitácora si hay usuario autenticado
+        if usuario and not usuario.is_anonymous:
+            logout_realizado.send(sender=None, usuario=usuario, ip=ip_address)
+            logger.info(f"Logout exitoso - Usuario: {usuario.nombre_usuario}, IP: {ip_address}")
+        else:
+            logger.info(f"Logout anónimo desde IP: {ip_address}")
+
+        # Preparar respuesta y limpiar cookies de sesión
+        response = Response(
+            {
+                "success": True,
+                "message": "Sesión cerrada correctamente. Las cookies han sido eliminadas.",
+                "timestamp": timezone.now(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+        return JWTManager.clear_cookies(response)
+
+    except Exception as e:
+        # Si ocurre un error, igual limpiamos cookies
+        if usuario and not usuario.is_anonymous:
+            logout_error.send(sender=None, usuario=usuario, ip=ip_address, error=str(e))
+
+        logger.error(f"Error al cerrar sesión ({ip_address}): {str(e)}")
+
+        response = Response(
+            {
+                "success": False,
+                "message": "Ocurrió un error durante el cierre de sesión, pero las cookies fueron eliminadas.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
         return JWTManager.clear_cookies(response)
 
 

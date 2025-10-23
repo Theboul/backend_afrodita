@@ -1,5 +1,7 @@
 import logging
+import ipaddress
 from django.utils.deprecation import MiddlewareMixin
+from django.conf import settings
 from apps.bitacora.signals import vista_visitada
 
 logger = logging.getLogger(__name__)
@@ -89,10 +91,102 @@ class AuditoriaMiddleware(MiddlewareMixin):
         return any(ruta in path for ruta in rutas_importantes)
 
     def get_client_ip(self, request):
-        """Obtiene la IP real del cliente considerando proxys o balanceadores."""
+        """
+        Obtiene la IP real del cliente de forma segura, considerando proxies confiables.
+        
+        Funcionamiento:
+        1. Si no hay proxies configurados (TRUSTED_PROXY_COUNT=0), usa REMOTE_ADDR
+        2. Si hay proxies, valida la cadena X-Forwarded-For
+        3. Extrae la IP real según el número de proxies confiables
+        4. Valida que la IP sea válida
+        5. Loguea intentos sospechosos de spoofing
+        
+        Returns:
+            str: IP del cliente o None si no se puede determinar
+        """
+        # Obtener configuración
+        trusted_proxy_count = getattr(settings, 'TRUSTED_PROXY_COUNT', 0)
+        trusted_proxy_ips = getattr(settings, 'TRUSTED_PROXY_IPS', [])
+        log_suspicious = getattr(settings, 'LOG_SUSPICIOUS_IPS', True)
+        
+        # Obtener REMOTE_ADDR (siempre disponible)
+        remote_addr = request.META.get('REMOTE_ADDR')
+        
+        # Si no hay proxies configurados, usar directamente REMOTE_ADDR
+        if trusted_proxy_count == 0:
+            return remote_addr
+        
+        # Obtener X-Forwarded-For
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+        
+        # Si no hay X-Forwarded-For pero esperamos proxies, algo está mal
+        if not x_forwarded_for:
+            if log_suspicious:
+                logger.warning(
+                    f"Se esperaban {trusted_proxy_count} proxies pero no hay "
+                    f"X-Forwarded-For. Usando REMOTE_ADDR: {remote_addr}"
+                )
+            return remote_addr
+        
+        # Parsear la cadena de IPs
+        ips = [ip.strip() for ip in x_forwarded_for.split(',')]
+        
+        # Validar que haya suficientes IPs en la cadena
+        # Ejemplo: trusted_proxy_count=1 requiere al menos 2 IPs (client + proxy)
+        if len(ips) <= trusted_proxy_count:
+            if log_suspicious:
+                logger.warning(
+                    f"X-Forwarded-For tiene menos IPs ({len(ips)}) de las esperadas "
+                    f"({trusted_proxy_count + 1}): {x_forwarded_for}. "
+                    f"Posible intento de spoofing. Usando REMOTE_ADDR: {remote_addr}"
+                )
+            return remote_addr
+        
+        # Extraer la IP del cliente (posición: -(trusted_proxy_count + 1))
+        # Ejemplo con trusted_proxy_count=1:
+        # "client, proxy" -> ips[-(1+1)] = ips[-2] = client
+        client_ip_index = -(trusted_proxy_count + 1)
+        client_ip = ips[client_ip_index]
+        
+        # Validar que sea una IP válida
+        if not self._is_valid_ip(client_ip):
+            if log_suspicious:
+                logger.warning(
+                    f"IP del cliente inválida en X-Forwarded-For: '{client_ip}'. "
+                    f"Cadena completa: {x_forwarded_for}. "
+                    f"Usando REMOTE_ADDR: {remote_addr}"
+                )
+            return remote_addr
+        
+        # Si hay lista de IPs de proxies confiables, validar REMOTE_ADDR
+        if trusted_proxy_ips and remote_addr not in trusted_proxy_ips:
+            if log_suspicious:
+                logger.warning(
+                    f"REMOTE_ADDR ({remote_addr}) no está en la lista de proxies "
+                    f"confiables. Posible intento de bypass. "
+                    f"X-Forwarded-For: {x_forwarded_for}"
+                )
+            return remote_addr
+        
+        # Todo validado, retornar la IP del cliente
+        logger.debug(
+            f"IP del cliente extraída correctamente: {client_ip} "
+            f"(X-Forwarded-For: {x_forwarded_for})"
+        )
+        return client_ip
+    
+    def _is_valid_ip(self, ip_string):
+        """
+        Valida que una cadena sea una dirección IP válida (IPv4 o IPv6).
+        
+        Args:
+            ip_string (str): String a validar
+            
+        Returns:
+            bool: True si es una IP válida, False en caso contrario
+        """
+        try:
+            ipaddress.ip_address(ip_string)
+            return True
+        except ValueError:
+            return False

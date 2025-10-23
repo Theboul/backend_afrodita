@@ -50,6 +50,25 @@ class Bitacora(models.Model):
         ('CATEGORY_RESTORE', 'Restauración de categoría'),
 
         # =====================================================
+        # Gestión de productos
+        # =====================================================
+        ('PRODUCT_CREATE', 'Creación de producto'),
+        ('PRODUCT_UPDATE', 'Actualización de producto'),
+        ('PRODUCT_DELETE', 'Eliminación de producto'),
+        ('PRODUCT_STATE_CHANGE', 'Cambio de estado de producto'),
+        ('PRODUCT_STOCK_ADJUST', 'Ajuste de stock de producto'),
+
+        # =====================================================
+        # Gestión de imágenes del catálogo
+        # =====================================================
+        ('IMAGE_UPLOAD', 'Subida de imagen de producto'),
+        ('IMAGE_DELETE', 'Eliminación de imagen de producto'),
+        ('IMAGE_SET_MAIN', 'Cambio de imagen principal'),
+        ('IMAGE_REORDER', 'Reordenamiento de imágenes'),
+        ('IMAGE_RESTORE', 'Restauración de imagen de producto'),
+        ('IMAGE_UPDATE', 'Actualización de metadatos de imagen'),
+
+        # =====================================================
         # Errores y seguridad
         # =====================================================
         ('ERROR_404', 'Página no encontrada'),

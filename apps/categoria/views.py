@@ -17,7 +17,7 @@ from apps.bitacora.signals import (
     categoria_actualizada,
     categoria_movida
 )
-from apps.bitacora.utils import _get_client_ip
+from apps.bitacora.utils import get_client_ip_from_request as _get_client_ip
 
 
 class CategoriaViewSet(viewsets.ModelViewSet):
@@ -214,7 +214,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         return Response({"ruta": self._build_ruta(categoria)})
 
     # === GET /api/categorias/estadisticas/ ===
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='estadisticas')
     def estadisticas(self, request):
         total = Categoria.objects.count()
         principales = Categoria.objects.filter(id_catpadre__isnull=True).count()
@@ -231,7 +231,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         })
     
     # === ENDPOINT: /api/categoria/listar_arbol/
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='listar_arbol')
     def listar_arbol(self, request):
         """
         Devuelve todas las categorías activas en estructura jerárquica,

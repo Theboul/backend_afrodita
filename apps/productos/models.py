@@ -7,14 +7,13 @@ class Medida(models.Model):
     id_medida = models.AutoField(primary_key=True)
     medida = models.DecimalField(max_digits=4, decimal_places=2)
     descripcion = models.CharField(max_length=50, null=True, blank=True)
-    unidad = models.CharField(max_length=10, null=True, blank=True)
 
     class Meta:
         db_table = 'medida'
         managed = False
 
     def __str__(self):
-        return f"{self.medida} {self.unidad or ''}".strip()
+        return f"{self.medida}"
 
 
 # ==========================================================
@@ -30,7 +29,8 @@ class ConfiguracionLente(models.Model):
     id_medida = models.ForeignKey(
         Medida,
         on_delete=models.CASCADE,
-        db_column='id_medida'
+        db_column='id_medida',
+        related_name='configuraciones'
     )
 
     class Meta:
@@ -38,7 +38,7 @@ class ConfiguracionLente(models.Model):
         managed = False
 
     def __str__(self):
-        return f"{self.color} ({self.diametro} mm)"
+        return f"{self.color} - Curva {self.curva} - Diámetro {self.diametro} - Medida {self.id_medida.medida}"
 
 
 # ==========================================================
@@ -55,7 +55,9 @@ class Producto(models.Model):
         ConfiguracionLente,
         on_delete=models.SET_NULL,
         null=True,
-        db_column='id_configuracion'
+        blank=True,
+        db_column='id_configuracion',
+        related_name='productos'
     )
     id_categoria = models.ForeignKey(
         'categoria.Categoria',
@@ -63,6 +65,8 @@ class Producto(models.Model):
         db_column='id_categoria',
         related_name='productos'
     )
+    fecha_creacion = models.DateTimeField(null=True, blank=True)
+    ultima_actualizacion = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'producto'
@@ -70,32 +74,19 @@ class Producto(models.Model):
         ordering = ['nombre']
 
     def __str__(self):
-        return self.nombre
+        return f"{self.id_producto} - {self.nombre}"
 
-
-# ==========================================================
-# TABLA: imagen_producto
-# ==========================================================
-class ImagenProducto(models.Model):
-    id_imagen = models.AutoField(primary_key=True)
-    id_producto = models.ForeignKey(
-        Producto,
-        on_delete=models.CASCADE,
-        db_column='id_producto'
-    )
-    url = models.CharField(max_length=255)
-    public_id = models.CharField(max_length=150, null=True, blank=True)
-    formato = models.CharField(max_length=10, null=True, blank=True)
-    es_principal = models.BooleanField(default=False)
-    orden = models.SmallIntegerField(default=1)
-    estado_imagen = models.CharField(max_length=10, default='ACTIVA')
-    subido_por = models.IntegerField(null=True, blank=True)
-    fecha_subida = models.DateTimeField(null=True, blank=True)
-    fecha_actualizacion = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        db_table = 'imagen_producto'
-        managed = False
-
-    def __str__(self):
-        return f"Imagen de {self.id_producto_id} ({self.url})"
+    @property
+    def tiene_stock(self):
+        """Verifica si el producto tiene stock disponible"""
+        return self.stock > 0
+    
+    @property
+    def stock_bajo(self):
+        """Considera stock bajo si es menor a 10 unidades"""
+        return 0 < self.stock < 10
+    
+    @property
+    def esta_activo(self):
+        """Verifica si el producto está activo"""
+        return self.estado_producto == 'ACTIVO'

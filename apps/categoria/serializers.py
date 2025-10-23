@@ -28,7 +28,7 @@ class CategoriaSerializer(serializers.ModelSerializer):
                 Categoria.objects.filter(estado_categoria='ACTIVA')
                 .select_related('id_catpadre')
                 .prefetch_related('subcategorias')
-                .annotate(cantidad_productos=Count('producto'))
+                .annotate(cantidad_productos=Count('productos'))
             )
             self.context["prefetched_categorias"] = all_categorias
 

@@ -3,6 +3,9 @@ Django settings for afrodita project.
 """
 from datetime import timedelta
 from pathlib import Path
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 from dotenv import load_dotenv
 import os
 
@@ -40,11 +43,14 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
-    
+    'cloudinary',
+    'cloudinary_storage',
+
     # Local apps
     'apps.autenticacion',
     'apps.usuarios',
     'apps.productos',
+    'apps.imagenes',
     'apps.ventas',
     'apps.compras',
     'apps.bitacora',
@@ -118,6 +124,22 @@ DATABASES = {
     }
 }
 
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.getenv('CLOUDINARY_NAME'),
+    'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
+    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
+    'SECURE': os.getenv('CLOUDINARY_SECURE', 'True') == 'True'
+}
+
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+cloudinary.config(
+    cloud_name=os.getenv('CLOUDINARY_NAME'),
+    api_key=os.getenv('CLOUDINARY_API_KEY'),
+    api_secret=os.getenv('CLOUDINARY_API_SECRET'),
+    secure=os.getenv('CLOUDINARY_SECURE', 'True') == 'True'
+)
+
 # ==============================================================================
 # VALIDACIÓN DE CONTRASEÑAS
 # ==============================================================================
@@ -185,7 +207,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
         'user': '1000/hour',
-        'login': '5/minute',
+        'login': '10/minute',
         'register': '3/hour',
         'refresh': '10/minute',
         'password_reset': '3/hour',
@@ -196,7 +218,7 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10
+    'PAGE_SIZE': 50
 }
 
 
@@ -342,3 +364,4 @@ LOGGING = {
     },
 }
 
+TRUSTED_PROXY_COUNT = 1

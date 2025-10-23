@@ -16,39 +16,57 @@ class JWTCookieAuthenticationMiddleware(MiddlewareMixin):
     Extrae el token, lo valida y asigna el usuario autenticado al request.
     """
     def process_request(self, request):
-        # Si ya hay un header Authorization, no hacer nada
-        if request.META.get('HTTP_AUTHORIZATION'):
+        # No procesar si ya hay header Authorization
+        if request.META.get("HTTP_AUTHORIZATION"):
             return None
 
-        # Obtener token desde cookie
-        access_token = request.COOKIES.get('access_token')
-        
+        path = request.path or ""
+
+        # Ignorar rutas que no son parte del API
+        if not path.startswith("/api/"):
+            # No intervenir en frontend, favicon, admin, etc.
+            return None
+
+        # Ignorar rutas públicas dentro del API
+        rutas_excluidas = [
+            "/api/auth/login/",
+            "/api/auth/refresh/",
+            "/api/auth/logout/",
+            "/api/auth/verificar-sesion/",
+        ]
+        if any(path.startswith(r) for r in rutas_excluidas):
+            return None
+
+        # Obtener token de cookie
+        access_token = request.COOKIES.get("access_token")
+
         if access_token:
             try:
-                # 1. Agregar al header Authorization
-                request.META['HTTP_AUTHORIZATION'] = f'Bearer {access_token}'
-                
-                # 2. CRÍTICO: Validar y autenticar el usuario
+                request.META["HTTP_AUTHORIZATION"] = f"Bearer {access_token}"
                 jwt_auth = JWTAuthentication()
                 validated_token = jwt_auth.get_validated_token(access_token)
                 user = jwt_auth.get_user(validated_token)
-                
-                # 3. Asignar usuario autenticado al request
                 request.user = user
-                
-                logger.debug(f"Usuario autenticado desde cookie: {user.nombre_usuario}")
-                
+                logger.debug(f"Usuario autenticado desde cookie: {user}")
             except (InvalidToken, AuthenticationFailed) as e:
-                # Token inválido o expirado - no hacer nada, usuario será AnonymousUser
-                logger.debug(f"Token inválido en cookie: {str(e)}")
-                pass
+                logger.warning(f"Token inválido en cookie: {e}")
+                request.user = None
             except Exception as e:
-                logger.error(f"Error al procesar JWT desde cookie: {str(e)}")
-                pass
-        
-        return None
+                logger.error(f"Error al procesar JWT desde cookie: {e}")
+                request.user = None
+            return None
 
-
+        # Si no hay token (en una ruta API protegida) → limpiar cookies
+        response = JsonResponse(
+            {"detail": "Token inválido o ausente. Sesión reiniciada."},
+            status=401,
+        )
+        response.delete_cookie("access_token", path="/")
+        response.delete_cookie("refresh_token", path="/api/auth/refresh/")
+        logger.info(f"Cookies limpiadas por token inválido en {path}")
+        return response
+    
+    
 class IPBlacklistMiddleware(MiddlewareMixin):
     """
     Middleware para bloquear IPs en la lista negra.
@@ -149,32 +167,38 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
     Middleware para agregar headers de seguridad adicionales.
     """
     def process_response(self, request, response):
-        # Prevenir clickjacking
-        response['X-Frame-Options'] = 'DENY'
-        
-        # Prevenir MIME type sniffing
-        response['X-Content-Type-Options'] = 'nosniff'
-        
-        # XSS Protection (legacy browsers)
-        response['X-XSS-Protection'] = '1; mode=block'
-        
-        # Referrer Policy
-        response['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-        
+        # Anti clickjacking
+        response["X-Frame-Options"] = "DENY"
+
+        # Prevención de MIME sniffing
+        response["X-Content-Type-Options"] = "nosniff"
+
+        # Protección básica XSS (para navegadores antiguos)
+        response["X-XSS-Protection"] = "1; mode=block"
+
+        # Política de referer
+        response["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
         # Permissions Policy (reemplaza Feature-Policy)
-        response['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=(), payment=(), usb=()'
-        
-        # Content Security Policy básico
-        response['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'"
-        
-        # Controlar cache de páginas sensibles
-        if 'auth' in request.path or 'admin' in request.path:
-            response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response['Pragma'] = 'no-cache'
-            response['Expires'] = '0'
-        
-        # Strict Transport Security (solo si usas HTTPS)
+        response["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+
+        # Política de contenido (CSP)
+        response["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self';"
+        )
+
+        # No cachear páginas sensibles (auth, admin)
+        if any(seg in request.path for seg in ["auth", "admin"]):
+            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
+
+        # Forzar HTTPS si aplica
         if request.is_secure():
-            response['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
-        
+            response["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+
         return response
