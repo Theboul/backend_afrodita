@@ -94,12 +94,14 @@ class AuditoriaMiddleware(MiddlewareMixin):
         """
         Obtiene la IP real del cliente de forma segura, considerando proxies confiables.
         
-        Funcionamiento:
-        1. Si no hay proxies configurados (TRUSTED_PROXY_COUNT=0), usa REMOTE_ADDR
-        2. Si hay proxies, valida la cadena X-Forwarded-For
-        3. Extrae la IP real según el número de proxies confiables
-        4. Valida que la IP sea válida
-        5. Loguea intentos sospechosos de spoofing
+        ACTUALIZADO: Soporte para Cloudflare, Render y otros CDNs.
+        
+        Prioridad de headers:
+        1. CF-Connecting-IP (Cloudflare) - Más confiable
+        2. True-Client-IP (Algunos CDNs)
+        3. X-Real-IP (Nginx)
+        4. X-Forwarded-For (Estándar)
+        5. REMOTE_ADDR (Fallback)
         
         Returns:
             str: IP del cliente o None si no se puede determinar
@@ -112,14 +114,34 @@ class AuditoriaMiddleware(MiddlewareMixin):
         # Obtener REMOTE_ADDR (siempre disponible)
         remote_addr = request.META.get('REMOTE_ADDR')
         
+        # PRIORIDAD 1: Cloudflare envía la IP real en CF-Connecting-IP
+        # Este header es MÁS CONFIABLE que X-Forwarded-For cuando usas Cloudflare
+        cf_connecting_ip = request.META.get('HTTP_CF_CONNECTING_IP')
+        if cf_connecting_ip and self._is_valid_ip(cf_connecting_ip):
+            logger.debug(f"IP obtenida de CF-Connecting-IP (Cloudflare): {cf_connecting_ip}")
+            return cf_connecting_ip
+        
+        # PRIORIDAD 2: True-Client-IP (usado por algunos CDNs)
+        true_client_ip = request.META.get('HTTP_TRUE_CLIENT_IP')
+        if true_client_ip and self._is_valid_ip(true_client_ip):
+            logger.debug(f"IP obtenida de True-Client-IP: {true_client_ip}")
+            return true_client_ip
+        
+        # PRIORIDAD 3: X-Real-IP (usado por Nginx)
+        x_real_ip = request.META.get('HTTP_X_REAL_IP')
+        if x_real_ip and self._is_valid_ip(x_real_ip):
+            logger.debug(f"IP obtenida de X-Real-IP: {x_real_ip}")
+            return x_real_ip
+        
         # Si no hay proxies configurados, usar directamente REMOTE_ADDR
         if trusted_proxy_count == 0:
+            logger.debug(f"Sin proxies configurados, usando REMOTE_ADDR: {remote_addr}")
             return remote_addr
         
-        # Obtener X-Forwarded-For
+        # PRIORIDAD 4: X-Forwarded-For (estándar pero menos confiable)
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         
-        # Si no hay X-Forwarded-For pero esperamos proxies, algo está mal
+        # Si no hay X-Forwarded-For pero esperamos proxies
         if not x_forwarded_for:
             if log_suspicious:
                 logger.warning(
@@ -132,7 +154,6 @@ class AuditoriaMiddleware(MiddlewareMixin):
         ips = [ip.strip() for ip in x_forwarded_for.split(',')]
         
         # Validar que haya suficientes IPs en la cadena
-        # Ejemplo: trusted_proxy_count=1 requiere al menos 2 IPs (client + proxy)
         if len(ips) <= trusted_proxy_count:
             if log_suspicious:
                 logger.warning(
@@ -142,9 +163,7 @@ class AuditoriaMiddleware(MiddlewareMixin):
                 )
             return remote_addr
         
-        # Extraer la IP del cliente (posición: -(trusted_proxy_count + 1))
-        # Ejemplo con trusted_proxy_count=1:
-        # "client, proxy" -> ips[-(1+1)] = ips[-2] = client
+        # Extraer la IP del cliente
         client_ip_index = -(trusted_proxy_count + 1)
         client_ip = ips[client_ip_index]
         
@@ -170,8 +189,8 @@ class AuditoriaMiddleware(MiddlewareMixin):
         
         # Todo validado, retornar la IP del cliente
         logger.debug(
-            f"IP del cliente extraída correctamente: {client_ip} "
-            f"(X-Forwarded-For: {x_forwarded_for})"
+            f"IP del cliente extraída de X-Forwarded-For: {client_ip} "
+            f"(Cadena completa: {x_forwarded_for})"
         )
         return client_ip
     
