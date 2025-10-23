@@ -307,19 +307,27 @@ CORS_ALLOW_METHODS = [
     'PUT',
 ]
 
+# Permitir orígenes confiables para CSRF
+CSRF_TRUSTED_ORIGINS = [
+    "https://afroditastore.netlify.app",
+    "https://backend-afrodita.onrender.com",
+]
+
 # ==============================================================================
 # SEGURIDAD DE COOKIES
 # ==============================================================================
 
 # Cookies de sesión
-SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = not DEBUG  # True en producción, False en desarrollo
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'none'
+SESSION_COOKIE_SAMESITE = 'None' if not DEBUG else 'Lax'  # None para cross-domain
+SESSION_COOKIE_DOMAIN = None  # Permite subir cookies a cualquier dominio
 
 # Cookies CSRF
-CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = not DEBUG  # True en producción
 CSRF_COOKIE_HTTPONLY = False  # JS debe leerlo
-CSRF_COOKIE_SAMESITE = 'none'
+CSRF_COOKIE_SAMESITE = 'None' if not DEBUG else 'Lax'  # None para cross-domain
+CSRF_COOKIE_DOMAIN = None  # Permite subir cookies a cualquier dominio
 
 # Headers de seguridad
 SECURE_BROWSER_XSS_FILTER = True

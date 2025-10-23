@@ -26,16 +26,21 @@ class JWTManager:
     def set_tokens_in_cookies(response, tokens):
         """
         Almacena tokens en cookies HttpOnly seguras.
+        Configurado para soportar cross-domain (Render + Netlify).
         """
         is_production = not settings.DEBUG
+        
+        # SameSite=None es necesario para cookies cross-domain
+        # Requiere que Secure=True (solo HTTPS)
+        samesite_value = "None" if is_production else "Lax"
         
         # Access token - Corta duración, disponible para todas las rutas
         response.set_cookie(
             key="access_token",
             value=tokens["access"],
             httponly=True,  # Protección XSS
-            secure=is_production,  # Solo HTTPS en producción
-            samesite="Strict",  # Protección CSRF
+            secure=is_production,  # Solo HTTPS en producción (requerido con SameSite=None)
+            samesite=samesite_value,  # None para cross-domain
             max_age=60 * 30,  # 30 minutos
             path="/",  # Disponible en todo el sitio
         )
@@ -46,7 +51,7 @@ class JWTManager:
             value=tokens["refresh"],
             httponly=True,
             secure=is_production,
-            samesite="Strict",
+            samesite=samesite_value,  # None para cross-domain
             max_age=60 * 60 * 24 * 7,  # 7 días
             path="/api/auth/refresh/",  # Coincide con las URLs configuradas
         )
