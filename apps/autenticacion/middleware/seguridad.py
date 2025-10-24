@@ -34,6 +34,7 @@ class JWTCookieAuthenticationMiddleware(MiddlewareMixin):
             "/api/auth/refresh/",
             "/api/auth/logout/",
             "/api/auth/verificar-sesion/",
+            "/api/productos/productos-imagen/"
             "/api/usuarios/register/cliente/step1/",
             "/api/usuarios/register/cliente/step2/",
         ]

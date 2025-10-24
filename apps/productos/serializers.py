@@ -1,8 +1,14 @@
 from rest_framework import serializers
 from .models import Producto, ConfiguracionLente, Medida
 from apps.categoria.models import Categoria
+from apps.imagenes.models import ImagenProducto
 from apps.imagenes.serializers import ImagenProductoSerializer
+from rest_framework.pagination import PageNumberPagination
 
+class ProductoPagination(PageNumberPagination):
+    page_size = 9           # Cantidad de productos por página
+    page_size_query_param = 'page_size'  # Permite cambiar por query param
+    max_page_size = 50      # Límite máximo
 
 # ==========================================================
 # SERIALIZERS AUXILIARES
@@ -44,6 +50,36 @@ class CategoriaSimpleSerializer(serializers.ModelSerializer):
 # ==========================================================
 # SERIALIZERS DE PRODUCTO
 # ==========================================================
+class ProductoConImagenSerializer(serializers.ModelSerializer):
+    categoria_nombre = serializers.CharField(source="id_categoria.nombre", read_only=True)
+    configuracion = ConfiguracionLenteSerializer(source="id_configuracion", read_only=True)
+    id_configuracion = serializers.CharField(source="id_configuracion.id_configuracion", read_only=True)
+    imagen_principal = serializers.SerializerMethodField()
+    pagination_class = ProductoPagination
+
+    class Meta:
+        model = Producto
+        fields = [
+            "id_producto",
+            "nombre",
+            "precio",
+            "stock",
+            "descripcion",
+            "estado_producto",
+            "configuracion",
+            "id_configuracion",
+            "id_categoria",
+            "categoria_nombre",
+            "imagen_principal",
+        ]
+
+    def get_imagen_principal(self, obj):
+        imagen = ImagenProducto.objects.filter(
+            id_producto=obj, es_principal=True, estado_imagen="ACTIVA"
+        ).first()
+        if imagen:
+            return ImagenProductoSerializer(imagen).data
+        return None
 
 class ProductoListSerializer(serializers.ModelSerializer):
     """Serializer ligero para listado de productos"""

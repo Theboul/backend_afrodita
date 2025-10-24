@@ -18,7 +18,6 @@ from apps.bitacora.signals import (
     imagen_reordenada
 )
 
-
 class ImagenProductoViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestionar las imágenes del catálogo
