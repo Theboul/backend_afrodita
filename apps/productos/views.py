@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.utils import timezone
@@ -14,7 +14,9 @@ from .serializers import (
     ActualizarProductoSerializer,
     CambiarEstadoSerializer,
     AjustarStockSerializer,
-    ConfiguracionLenteSerializer
+    ConfiguracionLenteSerializer,
+    ProductoConImagenSerializer,
+    ProductoPagination,
 )
 
 # Importar señales
@@ -351,6 +353,40 @@ class ProductoViewSet(viewsets.ModelViewSet):
             ip = request.META.get('REMOTE_ADDR')
         return ip
 
+class ProductoConImagenViewSet(viewsets.ModelViewSet):
+    queryset = Producto.objects.all()
+    serializer_class = ProductoConImagenSerializer
+    pagination_class = ProductoPagination
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAuthenticated, IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        """
+        Permite filtrar por:
+        - search: texto en nombre o descripción
+        - categoria: texto para buscar en descripción (ej: 'celestes')
+        """
+        qs = Producto.objects.all()
+
+        # 1️⃣ Búsqueda por nombre o descripción
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(nombre__icontains=search) | Q(descripcion__icontains=search)
+            )
+
+        # 2️⃣ Filtro por categoría (lo que viene del frontend)
+        categoria = self.request.query_params.get("categoria")
+        if categoria:
+            # Buscar coincidencias en la descripción (ej: 'celeste', 'verde', 'líquido')
+            qs = qs.filter(descripcion__icontains=categoria)
+
+        return qs
 
 class ConfiguracionLenteViewSet(viewsets.ReadOnlyModelViewSet):
     """
