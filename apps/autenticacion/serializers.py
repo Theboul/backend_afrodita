@@ -8,19 +8,29 @@ class LoginSerializer(serializers.Serializer):
     """
     Serializer encargado de validar las credenciales de un usuario
     con mensajes genéricos para prevenir enumeración de usuarios.
+    Acepta tanto 'contraseña' (español) como 'password' (inglés) para compatibilidad.
     """
     credencial = serializers.CharField(
         max_length=100,
         help_text="Nombre de usuario o correo electrónico"
     )
     contraseña = serializers.CharField(
+        required=False,
         write_only=True,
-        style={'input_type': 'password'}
+        style={'input_type': 'password'},
+        help_text="Contraseña en español"
+    )
+    password = serializers.CharField(
+        required=False,
+        write_only=True,
+        style={'input_type': 'password'},
+        help_text="Password en inglés (alias de contraseña)"
     )
 
     def validate(self, data):
         credencial = data.get("credencial", "").strip()
-        contraseña = data.get("contraseña", "")
+        # Aceptar tanto 'contraseña' como 'password'
+        contraseña = data.get("contraseña") or data.get("password", "")
 
         # Validación básica
         if not credencial or not contraseña:

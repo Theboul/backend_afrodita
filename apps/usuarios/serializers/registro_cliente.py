@@ -19,6 +19,7 @@ class RegistroStep1Serializer(serializers.Serializer):
     correo = serializers.EmailField(max_length=100)
     contraseña = serializers.CharField(write_only=True, max_length=255)
     confirmar_contraseña = serializers.CharField(write_only=True, max_length=255)
+    
 
     def validate_nombre_usuario(self, value):
         return validate_unique_username(value)
@@ -62,10 +63,9 @@ class RegistroStep2Serializer(serializers.Serializer):
 
         rol_cliente = Rol.objects.get(nombre="CLIENTE")
         # Crear usuario base
-        usuario = Usuario.objects.create(
+        usuario = Usuario(
             nombre_completo=validated_data["nombre_completo"].strip(),
             nombre_usuario=validated_data["nombre_usuario"].strip(),
-            password=make_password(validated_data["contraseña"]),
             correo=validated_data["correo"].lower().strip(),
             telefono=validated_data.get("telefono"),
             sexo=validated_data["sexo"].upper(),
@@ -73,6 +73,9 @@ class RegistroStep2Serializer(serializers.Serializer):
             estado_usuario="ACTIVO",
             id_rol=rol_cliente,
         )
+
+        usuario.set_password(validated_data["contraseña"])
+        usuario.save()
 
         # Crear cliente asociado
         cliente = Cliente.objects.create(id_cliente=usuario)

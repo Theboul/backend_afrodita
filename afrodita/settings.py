@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'apps.compras',
     'apps.bitacora',
     'apps.categoria',
+    'apps.catalogo',
 ]
 
 # Modelo de usuario personalizado

@@ -34,7 +34,14 @@ class JWTCookieAuthenticationMiddleware(MiddlewareMixin):
             "/api/auth/refresh/",
             "/api/auth/logout/",
             "/api/auth/verificar-sesion/",
+            "/api/usuarios/register/cliente/step1/",
+            "/api/usuarios/register/cliente/step2/",
         ]
+
+        rutas_excluidas += [
+            "/api/catalogo/",
+        ]
+
         if any(path.startswith(r) for r in rutas_excluidas):
             return None
 

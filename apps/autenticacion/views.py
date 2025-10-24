@@ -25,6 +25,10 @@ def login_usuario(request):
     Endpoint para autenticación de usuarios.
     Protegido contra fuerza bruta con rate limiting.
     """
+    # DEBUG temporal - Ver qué datos llegan
+    logger.info(f"LOGIN REQUEST - Data recibida: {request.data}")
+    logger.info(f"Content-Type: {request.content_type}")
+    
     serializer = LoginSerializer(data=request.data)
 
     if serializer.is_valid():
@@ -60,6 +64,10 @@ def login_usuario(request):
         # Establecer tokens en cookies seguras
         return JWTManager.set_tokens_in_cookies(response, tokens)
 
+    # DEBUG temporal - Ver errores de validación
+    logger.warning(f"LOGIN VALIDATION FAILED - Errores: {serializer.errors}")
+    logger.warning(f"Datos enviados: {request.data}")
+    
     # Registrar intento fallido
     ip_address = obtener_ip_cliente(request)
     LoginAttempt.objects.create(usuario=None, ip=ip_address, exitoso=False)
