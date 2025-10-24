@@ -7,6 +7,7 @@ import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 import dj_database_url
+from corsheaders.defaults import default_headers, default_methods
 from dotenv import load_dotenv
 import os
 
@@ -290,7 +291,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ORIGIN_ALLOW_ALL = False  # Solo permitir orígenes especificados arriba
 
 # Headers permitidos (incluir cookie)
-CORS_ALLOW_HEADERS = [
+CORS_ALLOW_HEADERS = list(default_methods) +[
     'accept',
     'accept-encoding',
     'authorization',
@@ -304,7 +305,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # Métodos HTTP permitidos
-CORS_ALLOW_METHODS = [
+CORS_ALLOW_METHODS = list(default_headers) +[
     'DELETE',
     'GET',
     'OPTIONS',
@@ -328,6 +329,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://backend-afrodita.onrender.com",
 ]
 
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # ==============================================================================
 # SEGURIDAD DE COOKIES
 # ==============================================================================
