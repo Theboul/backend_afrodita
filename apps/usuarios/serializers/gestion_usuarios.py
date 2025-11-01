@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
-from ..models import Usuario, Vendedor, Administrador, Cliente, Rol
+from ..models import Usuario, Vendedor, Administrador, Cliente
+from apps.seguridad.models import Rol  # 🔄 Importar desde seguridad
 from utils.validators import (
     validate_password_strength,
     validate_unique_email,
@@ -9,6 +10,9 @@ from utils.validators import (
     validate_phone,
     validate_sex,
 )
+
+# Importar constantes
+from core.constants.estados import UserStatus
 
 # =====================================================
 # SERIALIZERS PARA GESTIÓN ADMINISTRATIVA
@@ -122,7 +126,7 @@ class UsuarioAdminCreateSerializer(serializers.ModelSerializer):
             password=make_password(contraseña),
             telefono=validated_data.get('telefono'),
             sexo=validated_data['sexo'].upper(),
-            estado_usuario='ACTIVO',
+            estado_usuario=UserStatus.ACTIVO,
             id_rol=rol_obj,
             fecha_registro=timezone.now(),
         )
@@ -198,7 +202,7 @@ class CambiarContraseñaSerializer(serializers.Serializer):
         return data
 
 class CambiarEstadoSerializer(serializers.Serializer):
-    estado_usuario = serializers.ChoiceField(choices=['ACTIVO', 'INACTIVO'])
+    estado_usuario = serializers.ChoiceField(choices=UserStatus.choices())
     motivo = serializers.CharField(
         required=False, 
         allow_blank=True, 

@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.db.models import Count
 from .models import Categoria
 from apps.productos.models import Producto
+from core.constants import CategoryStatus
 
 
 class CategoriaSerializer(serializers.ModelSerializer):
@@ -25,7 +26,7 @@ class CategoriaSerializer(serializers.ModelSerializer):
         all_categorias = self.context.get("prefetched_categorias")
         if not all_categorias:
             all_categorias = (
-                Categoria.objects.filter(estado_categoria='ACTIVA')
+                Categoria.objects.filter(estado_categoria=CategoryStatus.ACTIVA)
                 .select_related('id_catpadre')
                 .prefetch_related('subcategorias')
                 .annotate(cantidad_productos=Count('productos'))

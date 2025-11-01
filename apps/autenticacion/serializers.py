@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.db.models import Q
 from django.contrib.auth.hashers import check_password
 from apps.usuarios.models import Usuario
+from core.constants import UserStatus, Messages
 
 
 class LoginSerializer(serializers.Serializer):
@@ -34,9 +35,7 @@ class LoginSerializer(serializers.Serializer):
 
         # Validación básica
         if not credencial or not contraseña:
-            raise serializers.ValidationError(
-                "Credenciales inválidas. Verifica tu usuario y contraseña."
-            )
+            raise serializers.ValidationError(Messages.INVALID_CREDENTIALS)
 
         # Buscar usuario por nombre de usuario o correo (una sola consulta)
         usuario = Usuario.objects.filter(
@@ -45,15 +44,11 @@ class LoginSerializer(serializers.Serializer):
 
         # Mensaje genérico para evitar enumeración de usuarios
         if not usuario or not check_password(contraseña, usuario.password):
-            raise serializers.ValidationError(
-                "Credenciales inválidas. Verifica tu usuario y contraseña."
-            )
+            raise serializers.ValidationError(Messages.INVALID_CREDENTIALS)
 
         # Validar si el usuario está activo
-        if usuario.estado_usuario != "ACTIVO":
-            raise serializers.ValidationError(
-                "Tu cuenta no está disponible. Contacta al soporte técnico."
-            )
+        if usuario.estado_usuario != UserStatus.ACTIVO:
+            raise serializers.ValidationError(Messages.ACCOUNT_INACTIVE)
 
         # Si todo está correcto, devolver el usuario validado
         data["usuario"] = usuario

@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.contrib.auth.hashers import make_password
-from ..models import Usuario, Cliente, Rol
+from ..models import Usuario, Cliente
+from apps.seguridad.models import Rol  # 🔄 Importar desde seguridad
 from utils.validators import (
     validate_password_strength,
     validate_unique_email,

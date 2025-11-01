@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from ..models import Usuario, Rol
+from ..models import Usuario
+from apps.seguridad.models import Rol
 from utils.validators import validate_phone, validate_sex
 
 

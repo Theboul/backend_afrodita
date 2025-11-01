@@ -8,19 +8,26 @@ from .views import (
     UsuarioListView,
     UsuarioDetailView,
     UsuarioUpdateView,
+    PerfilClienteViewSet,
+    DireccionClienteViewSet,
 )
 
 # Importar las NUEVAS views de gestión administrativa
 from .views.gestion_usuarios import UsuarioAdminViewSet
 
-# Configurar el router para los endpoints administrativos
+# Configurar el router para los endpoints administrativos y de perfil
 router = DefaultRouter()
+
+# Endpoints administrativos (solo para administradores)
 router.register(r'admin/usuarios', UsuarioAdminViewSet, basename='admin-usuario')
 
+# Endpoints de perfil del cliente (auto-gestión)
+router.register(r'perfil', PerfilClienteViewSet, basename='perfil-cliente')
+
+# Endpoints de direcciones del cliente
+router.register(r'perfil/direcciones', DireccionClienteViewSet, basename='direcciones-cliente')
+
 urlpatterns = [
-    # =================================================
-    # ENDPOINTS EXISTENTES (SE MANTIENEN IGUAL)
-    # =================================================
     
     # --- Registro cliente (2 pasos)
     path("register/cliente/step1/", RegistroClienteStep1View.as_view(), name="register_cliente_step1"),
@@ -36,7 +43,7 @@ urlpatterns = [
     path("update/<int:id_usuario>/", UsuarioUpdateView.as_view(), name="usuario_update"),
     
     # =================================================
-    # NUEVOS ENDPOINTS ADMINISTRATIVOS (SE AGREGAN)
+    # ENDPOINTS CON ROUTER (ADMIN + PERFIL CLIENTE)
     # =================================================
     path("", include(router.urls)),
 ]

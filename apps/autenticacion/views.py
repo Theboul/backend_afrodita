@@ -10,9 +10,11 @@ from apps.autenticacion.models import LoginAttempt
 from .serializers import LoginSerializer, RefreshTokenSerializer
 from .utils.jwt_manager import JWTManager
 from .utils.throttling import LoginRateThrottle
+from .utils.helpers import obtener_ip_cliente, es_usuario_anonimo
 from apps.bitacora.signals import (
     login_exitoso, login_fallido, logout_realizado, logout_error
 )
+from core.constants import APIResponse, Messages
 import logging
 
 logger = logging.getLogger(__name__)
@@ -50,16 +52,17 @@ def login_usuario(request):
         logger.info(f"Login exitoso - Usuario: {usuario.nombre_usuario}, IP: {ip_address}")
 
         # Preparar respuesta
-        response = Response({
-            "success": True,
-            "message": f"Bienvenido {usuario.nombre_usuario}",
-            "user": {
-                "id": usuario.id_usuario,
-                "username": usuario.nombre_usuario,
-                "email": usuario.correo,
-                "rol": getattr(usuario.id_rol, 'nombre', None),
+        response = APIResponse.success(
+            message=Messages.WELCOME_USER.format(nombre=usuario.nombre_usuario),
+            data={
+                "user": {
+                    "id": usuario.id_usuario,
+                    "username": usuario.nombre_usuario,
+                    "email": usuario.correo,
+                    "rol": getattr(usuario.id_rol, 'nombre', None),
+                }
             }
-        }, status=status.HTTP_200_OK)
+        )
 
         # Establecer tokens en cookies seguras
         return JWTManager.set_tokens_in_cookies(response, tokens)
@@ -75,10 +78,7 @@ def login_usuario(request):
     login_fallido.send(sender=None, ip=ip_address, credencial=request.data.get("credencial"))
     logger.warning(f"Login fallido - IP: {ip_address}")
 
-    return Response({
-        "success": False,
-        "errors": serializer.errors
-    }, status=status.HTTP_400_BAD_REQUEST)
+    return APIResponse.bad_request(errors=serializer.errors)
 
 
 @api_view(["POST"])
@@ -104,37 +104,29 @@ def logout_usuario(request):
             logger.info(f"Refresh token invalidado para IP {ip_address}")
 
         # Registrar evento en bitácora si hay usuario autenticado
-        if usuario and not usuario.is_anonymous:
+        if not es_usuario_anonimo(request):
             logout_realizado.send(sender=None, usuario=usuario, ip=ip_address)
             logger.info(f"Logout exitoso - Usuario: {usuario.nombre_usuario}, IP: {ip_address}")
         else:
             logger.info(f"Logout anónimo desde IP: {ip_address}")
 
         # Preparar respuesta y limpiar cookies de sesión
-        response = Response(
-            {
-                "success": True,
-                "message": "Sesión cerrada correctamente. Las cookies han sido eliminadas.",
-                "timestamp": timezone.now(),
-            },
-            status=status.HTTP_200_OK,
+        response = APIResponse.success(
+            message=Messages.SESSION_CLOSED,
+            data={"timestamp": timezone.now()}
         )
 
         return JWTManager.clear_cookies(response)
 
     except Exception as e:
         # Si ocurre un error, igual limpiamos cookies
-        if usuario and not usuario.is_anonymous:
+        if not es_usuario_anonimo(request):
             logout_error.send(sender=None, usuario=usuario, ip=ip_address, error=str(e))
 
         logger.error(f"Error al cerrar sesión ({ip_address}): {str(e)}")
 
-        response = Response(
-            {
-                "success": False,
-                "message": "Ocurrió un error durante el cierre de sesión, pero las cookies fueron eliminadas.",
-            },
-            status=status.HTTP_200_OK,
+        response = APIResponse.success(
+            message=Messages.SESSION_CLOSED
         )
 
         return JWTManager.clear_cookies(response)
@@ -156,30 +148,27 @@ def refresh_token(request):
         )
         
         if not serializer.is_valid():
-            return Response({
-                "success": False,
-                "error": "Refresh token no válido o expirado."
-            }, status=status.HTTP_401_UNAUTHORIZED)
+            return APIResponse.error(
+                message=Messages.INVALID_REFRESH_TOKEN,
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
 
         # Generar nuevos tokens
         tokens = JWTManager.validar_y_refrescar_token(
             serializer.validated_data['refresh']
         )
 
-        response = Response({
-            "success": True,
-            "message": "Token refrescado correctamente."
-        }, status=status.HTTP_200_OK)
+        response = APIResponse.success(message=Messages.TOKEN_REFRESHED)
 
         # Actualizar cookies con nuevos tokens
         return JWTManager.set_tokens_in_cookies(response, tokens)
 
     except Exception as e:
         logger.error(f"Error al refrescar token: {str(e)}")
-        return Response({
-            "success": False,
-            "error": "No se pudo refrescar el token."
-        }, status=status.HTTP_401_UNAUTHORIZED)
+        return APIResponse.error(
+            message=Messages.INVALID_REFRESH_TOKEN,
+            status_code=status.HTTP_401_UNAUTHORIZED
+        )
 
 
 @api_view(["GET"])
@@ -189,24 +178,13 @@ def verificar_sesion(request):
     Endpoint para verificar si la sesión del usuario es válida.
     Útil para verificación en el frontend.
     """
-    return Response({
-        "success": True,
-        "user": {
-            "id": request.user.id,
-            "username": request.user.nombre_usuario,
-            "email": request.user.correo,
-            "rol": getattr(request.user.id_rol, 'nombre', None),
+    return APIResponse.success(
+        data={
+            "user": {
+                "id": request.user.id,
+                "username": request.user.nombre_usuario,
+                "email": request.user.correo,
+                "rol": getattr(request.user.id_rol, 'nombre', None),
+            }
         }
-    }, status=status.HTTP_200_OK)
-
-
-def obtener_ip_cliente(request):
-    """
-    Obtiene la IP real del cliente considerando proxies y balanceadores.
-    """
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0].strip()
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
+    )

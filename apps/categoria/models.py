@@ -1,4 +1,5 @@
 from django.db import models
+from core.constants import CategoryStatus
 
 class Categoria(models.Model):
     id_categoria = models.AutoField(primary_key=True)
@@ -11,7 +12,11 @@ class Categoria(models.Model):
         db_column='id_catpadre',
         related_name='subcategorias'
     )
-    estado_categoria = models.CharField(max_length=10, default='ACTIVA')
+    estado_categoria = models.CharField(
+        max_length=10, 
+        default=CategoryStatus.ACTIVA,
+        choices=CategoryStatus.choices()
+    )
 
 
     class Meta:

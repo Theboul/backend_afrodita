@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
-from ..models import Vendedor, Administrador, Rol
+from ..models import Vendedor, Administrador
+from apps.seguridad.models import Rol  # 🔄 Importar desde seguridad
 from .usuario_base import UsuarioBaseSerializer
 
 # =====================================================

@@ -4,6 +4,8 @@ import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 
+from core.constants import ImageStatus
+
 
 class ImagenProducto(models.Model):
     id_imagen = models.AutoField(primary_key=True)
@@ -23,8 +25,8 @@ class ImagenProducto(models.Model):
     )
     estado_imagen = models.CharField(
         max_length=10,
-        choices=[('ACTIVA', 'Activa'), ('INACTIVA', 'Inactiva')],
-        default='ACTIVA'
+        choices=ImageStatus.choices(),
+        default=ImageStatus.ACTIVA
     )
     subido_por = models.ForeignKey(
         'usuarios.Usuario',

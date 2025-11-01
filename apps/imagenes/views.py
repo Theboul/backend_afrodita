@@ -1,11 +1,12 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Case, When, Value, IntegerField, F
 from django.core.exceptions import ValidationError
 
 from apps.productos.models import Producto
+from apps.autenticacion.utils.helpers import obtener_ip_cliente
+from core.constants import APIResponse, Messages, ImageStatus
 from .models import ImagenProducto
 from .serializers import ImagenProductoSerializer, SubirImagenSerializer
 
@@ -31,19 +32,9 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
     queryset = ImagenProducto.objects.select_related('id_producto', 'subido_por')
     serializer_class = ImagenProductoSerializer
 
-    # ==========================================================
-    # UTILIDADES
-    # ==========================================================
-    def get_client_ip(self, request):
-        """Obtiene la IP real del usuario"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            return x_forwarded_for.split(',')[0]
-        return request.META.get('REMOTE_ADDR')
-
     def get_queryset(self):
         producto_id = self.request.query_params.get('producto')
-        qs = super().get_queryset().filter(estado_imagen='ACTIVA')
+        qs = super().get_queryset().filter(estado_imagen=ImageStatus.ACTIVA)
         if producto_id:
             qs = qs.filter(id_producto__id_producto=producto_id)
         return qs.order_by('orden')
@@ -62,7 +53,7 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
         try:
             producto = Producto.objects.get(id_producto=producto_id)
         except Producto.DoesNotExist:
-            return Response({'detail': 'Producto no encontrado'}, status=404)
+            return APIResponse.not_found(message=Messages.PRODUCT_NOT_FOUND)
 
         serializer = SubirImagenSerializer(
             data=request.data,
@@ -78,12 +69,12 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             imagen=imagen,
             usuario=request.user,
-            ip=self.get_client_ip(request)
+            ip=obtener_ip_cliente(request)
         )
 
-        return Response(
-            ImagenProductoSerializer(imagen).data,
-            status=status.HTTP_201_CREATED
+        return APIResponse.created(
+            data=ImagenProductoSerializer(imagen).data,
+            message=Messages.IMAGE_UPLOADED
         )
 
     @action(detail=True, methods=['post'])
@@ -100,14 +91,16 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             imagen=imagen,
             usuario=request.user,
-            ip=self.get_client_ip(request)
+            ip=obtener_ip_cliente(request)
         )
 
-        return Response({
-            'id_imagen': imagen.id_imagen,
-            'producto': imagen.id_producto.id_producto,
-            'message': 'Imagen marcada como principal correctamente'
-        })
+        return APIResponse.success(
+            data={
+                'id_imagen': imagen.id_imagen,
+                'producto': imagen.id_producto.id_producto,
+            },
+            message=Messages.IMAGE_MARKED_AS_PRINCIPAL
+        )
 
     @action(detail=True, methods=['delete'])
     def eliminar(self, request, pk=None):
@@ -118,13 +111,12 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
         imagen = self.get_object()
 
         if imagen.es_principal:
-            return Response(
-                {'detail': 'No se puede eliminar la imagen principal'},
-                status=status.HTTP_409_CONFLICT
+            return APIResponse.error(
+                message=Messages.CANNOT_DELETE_PRINCIPAL_IMAGE,
+                status_code=status.HTTP_409_CONFLICT
             )
 
         force_delete = request.query_params.get('force', 'false').lower() == 'true'
-
 
         if force_delete:
             imagen.eliminar_de_cloudinary()
@@ -133,17 +125,16 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
                 sender=self.__class__,
                 imagen=imagen,
                 usuario=request.user,
-                ip=self.get_client_ip(request)
+                ip=obtener_ip_cliente(request)
             )
             imagen.delete()
 
-            return Response(
-                {'message': 'Imagen eliminada definitivamente (Cloudinary + BD)'},
-                status=status.HTTP_204_NO_CONTENT
+            return APIResponse.success(
+                message=Messages.IMAGE_DELETED_PERMANENTLY,
+                status_code=status.HTTP_204_NO_CONTENT
             )
 
-
-        imagen.estado_imagen = 'INACTIVA'
+        imagen.estado_imagen = ImageStatus.INACTIVA
         imagen.save(update_fields=['estado_imagen'])
 
         # Emitir señal para bitácora
@@ -151,16 +142,15 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             imagen=imagen,
             usuario=request.user,
-            ip=self.get_client_ip(request)
+            ip=obtener_ip_cliente(request)
         )
 
-        return Response(
-            {
-                'message': 'Imagen marcada como inactiva (eliminación lógica)',
+        return APIResponse.success(
+            data={
                 'id_imagen': imagen.id_imagen,
                 'estado': imagen.estado_imagen
             },
-            status=status.HTTP_200_OK
+            message=Messages.IMAGE_DELETED_LOGICALLY
         )
     
     @action(detail=True, methods=['post'])
@@ -171,13 +161,12 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
         """
         imagen = self.get_object()
 
-        if imagen.estado_imagen == 'ACTIVA':
-            return Response(
-                {'detail': 'La imagen ya está activa.'},
-                status=status.HTTP_400_BAD_REQUEST
+        if imagen.estado_imagen == ImageStatus.ACTIVA:
+            return APIResponse.bad_request(
+                message=Messages.IMAGE_ALREADY_ACTIVE
             )
 
-        imagen.estado_imagen = 'ACTIVA'
+        imagen.estado_imagen = ImageStatus.ACTIVA
         imagen.save(update_fields=['estado_imagen'])
 
         # Emitir señal para bitácora
@@ -185,16 +174,15 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             imagen=imagen,
             usuario=request.user,
-            ip=self.get_client_ip(request)
+            ip=obtener_ip_cliente(request)
         )
 
-        return Response(
-            {
-                'message': 'Imagen restaurada correctamente',
+        return APIResponse.success(
+            data={
                 'id_imagen': imagen.id_imagen,
                 'estado': imagen.estado_imagen
             },
-            status=status.HTTP_200_OK
+            message=Messages.IMAGE_RESTORED
         )
 
     @action(detail=True, methods=['patch'])
@@ -231,14 +219,16 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
                 sender=self.__class__,
                 imagen=imagen,
                 usuario=request.user,
-                ip=self.get_client_ip(request),
+                ip=obtener_ip_cliente(request),
                 cambios=cambios
             )
 
-        return Response({
-            'message': 'Imagen actualizada correctamente',
-            'cambios': cambios or 'Sin cambios detectados'
-        })
+        return APIResponse.success(
+            data={
+                'cambios': cambios if cambios else Messages.NO_CHANGES_DETECTED
+            },
+            message=Messages.IMAGE_UPDATED
+        )
 
 
     # ==========================================================
@@ -262,13 +252,12 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
         # 1) Validar producto
         producto = Producto.objects.filter(id_producto=producto_id).first()
         if not producto:
-            return Response({'detail': 'Producto no encontrado'}, status=404)
+            return APIResponse.not_found(message=Messages.PRODUCT_NOT_FOUND)
 
         data = request.data.get('orden', [])
         if not isinstance(data, list) or not data:
-            return Response(
-                {'detail': 'Debe enviar una lista no vacía en "orden".'},
-                status=status.HTTP_400_BAD_REQUEST
+            return APIResponse.bad_request(
+                message=Messages.INVALID_ORDER_LIST
             )
 
         # 2) Validaciones de payload
@@ -276,32 +265,29 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
             ids = [int(item['id_imagen']) for item in data]
             nuevos_ordenes = [int(item['orden']) for item in data]
         except (KeyError, ValueError, TypeError):
-            return Response(
-                {'detail': 'Cada item debe tener "id_imagen" y "orden" enteros.'},
-                status=status.HTTP_400_BAD_REQUEST
+            return APIResponse.bad_request(
+                message=Messages.INVALID_ORDER_FORMAT
             )
 
         # No permitir orden <= 0
         if any(o <= 0 for o in nuevos_ordenes):
-            return Response(
-                {'detail': 'Todos los "orden" deben ser >= 1.'},
-                status=status.HTTP_400_BAD_REQUEST
+            return APIResponse.bad_request(
+                message=Messages.ORDER_MUST_BE_POSITIVE
             )
 
         # No permitir repetidos en órdenes o ids
         if len(set(ids)) != len(ids):
-            return Response({'detail': 'Hay id_imagen duplicados.'}, status=400)
+            return APIResponse.bad_request(message=Messages.DUPLICATE_IMAGE_IDS)
         if len(set(nuevos_ordenes)) != len(nuevos_ordenes):
-            return Response({'detail': 'Hay valores de "orden" duplicados.'}, status=400)
+            return APIResponse.bad_request(message=Messages.DUPLICATE_ORDER_VALUES)
 
         # 3) Verificar pertenencia de imágenes al producto
         qs = ImagenProducto.objects.filter(id_producto=producto, id_imagen__in=ids)
         existentes = list(qs.values_list('id_imagen', flat=True))
         faltantes = set(ids) - set(existentes)
         if faltantes:
-            return Response(
-                {'detail': f'Las imágenes {sorted(list(faltantes))} no pertenecen al producto o no existen.'},
-                status=status.HTTP_400_BAD_REQUEST
+            return APIResponse.bad_request(
+                message=Messages.IMAGES_NOT_BELONG_TO_PRODUCT.format(ids=sorted(list(faltantes)))
             )
 
         # 4) Actualización en dos fases para evitar colisiones:
@@ -326,7 +312,7 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             producto=producto,
             usuario=request.user,
-            ip=self.get_client_ip(request),
+            ip=obtener_ip_cliente(request),
             cantidad=len(ids)
         )
 
@@ -336,7 +322,7 @@ class ImagenProductoViewSet(viewsets.ModelViewSet):
             {'id_imagen': img.id_imagen, 'orden': img.orden, 'es_principal': img.es_principal}
             for img in actualizadas
         ]
-        return Response(
-            {'message': 'Imágenes reordenadas correctamente', 'resultado': payload},
-            status=status.HTTP_200_OK
+        return APIResponse.success(
+            data={'resultado': payload},
+            message=Messages.IMAGE_REORDERED
         )

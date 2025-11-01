@@ -7,6 +7,8 @@ import html
 import logging
 
 from apps.bitacora.services.logger import AuditoriaLogger
+from apps.autenticacion.utils import obtener_ip_cliente
+from core.constants import SecurityConstants
 
 logger = logging.getLogger(__name__)
 
@@ -93,20 +95,8 @@ def es_user_agent_sospechoso(user_agent):
     
     user_agent_lower = user_agent.lower()
     
-    # Patrones sospechosos
-    patrones_sospechosos = [
-        (r'<script', 'Contiene tag script'),
-        (r'javascript:', 'Contiene javascript:'),
-        (r'onerror=', 'Contiene evento onerror'),
-        (r'onclick=', 'Contiene evento onclick'),
-        (r'eval\(', 'Contiene función eval'),
-        (r'sqlmap', 'Herramienta de hacking SQL'),
-        (r'nikto', 'Scanner de vulnerabilidades'),
-        (r'nmap', 'Scanner de puertos'),
-        (r'metasploit', 'Framework de explotación'),
-    ]
-    
-    for patron, razon in patrones_sospechosos:
+    # Usar patrones desde SecurityConstants
+    for patron, razon in SecurityConstants.PATRONES_USER_AGENT_SOSPECHOSOS:
         if re.search(patron, user_agent_lower):
             logger.warning(
                 f"User-Agent sospechoso detectado: {razon} | "
@@ -255,17 +245,9 @@ def truncar_descripcion(descripcion, max_length=1000):
 # FUNCIONES DE CONVENIENCIA PARA LOGGING
 # =====================================================
 
-def get_client_ip_from_request(request):
-    """
-    Obtiene la IP real del cliente desde un request.
-    Wrapper simplificado para usar en views.
-    """
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0].strip()
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
+# NOTA: Para obtener IP del cliente, usar directamente:
+# from apps.autenticacion.utils import obtener_ip_cliente
+# ip = obtener_ip_cliente(request)
 
 
 def log_search_activity(query, ip=None, usuario=None):
@@ -308,7 +290,7 @@ def log_error_event(error_type, error_message, request=None, usuario=None):
     ruta = ""
     
     if request:
-        ip = get_client_ip_from_request(request)
+        ip = obtener_ip_cliente(request)
         ruta = request.path
     
     if error_type == '404':
@@ -405,17 +387,25 @@ def ofuscar_credencial(credencial, modo='parcial'):
             return credencial[:3] + '***' if len(credencial) > 3 else '***'
 
 
-def detectar_intento_fuerza_bruta(ip, ventana_minutos=5, max_intentos=5):
+def detectar_intento_fuerza_bruta(
+    ip, 
+    ventana_minutos=None, 
+    max_intentos=None
+):
     """
     Detecta si una IP está realizando intentos de fuerza bruta.
     
     Args:
         ip (str): Dirección IP a verificar
-        ventana_minutos (int): Ventana de tiempo en minutos (default: 5)
-        max_intentos (int): Máximo de intentos permitidos (default: 5)
+        ventana_minutos (int, optional): Ventana de tiempo en minutos
+        max_intentos (int, optional): Máximo de intentos permitidos
     
     Returns:
         tuple: (es_fuerza_bruta: bool, cantidad_intentos: int)
+        
+    Note:
+        Si no se proporcionan ventana_minutos o max_intentos, se usan
+        los valores de SecurityConstants.
     """
     from django.utils import timezone
     from datetime import timedelta
@@ -423,6 +413,12 @@ def detectar_intento_fuerza_bruta(ip, ventana_minutos=5, max_intentos=5):
     
     if not ip:
         return False, 0
+    
+    # Usar valores de SecurityConstants si no se proporcionan
+    if ventana_minutos is None:
+        ventana_minutos = SecurityConstants.DETECCION_FUERZA_BRUTA_VENTANA
+    if max_intentos is None:
+        max_intentos = SecurityConstants.DETECCION_FUERZA_BRUTA_MAX
     
     fecha_limite = timezone.now() - timedelta(minutes=ventana_minutos)
     

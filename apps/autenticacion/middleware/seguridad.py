@@ -5,6 +5,8 @@ from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
+from apps.autenticacion.utils.helpers import obtener_ip_cliente
+from core.constants import Messages, SecurityConstants
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,23 +29,8 @@ class JWTCookieAuthenticationMiddleware(MiddlewareMixin):
             # No intervenir en frontend, favicon, admin, etc.
             return None
 
-        # Ignorar rutas públicas dentro del API
-        rutas_excluidas = [
-            "/api/auth/",
-            "/api/auth/login/",
-            "/api/auth/refresh/",
-            "/api/auth/logout/",
-            "/api/auth/verificar-sesion/",
-            "/api/productos/productos-imagen/"
-            "/api/usuarios/register/cliente/step1/",
-            "/api/usuarios/register/cliente/step2/",
-        ]
-
-        rutas_excluidas += [
-            "/api/catalogo/",
-        ]
-
-        if any(path.startswith(r) for r in rutas_excluidas):
+        # Ignorar rutas públicas dentro del API (usar constantes)
+        if any(path.startswith(r) for r in SecurityConstants.RUTAS_PUBLICAS_API):
             return None
 
         # Obtener token de cookie
@@ -67,7 +54,7 @@ class JWTCookieAuthenticationMiddleware(MiddlewareMixin):
 
         # Si no hay token (en una ruta API protegida) → limpiar cookies
         response = JsonResponse(
-            {"detail": "Token inválido o ausente. Sesión reiniciada."},
+            {"detail": Messages.UNAUTHORIZED},
             status=401,
         )
         response.delete_cookie("access_token", path="/")
@@ -78,42 +65,34 @@ class JWTCookieAuthenticationMiddleware(MiddlewareMixin):
     
 class IPBlacklistMiddleware(MiddlewareMixin):
     """
-    Middleware para bloquear IPs en la lista negra.
+    Middleware para bloquear IPs y ponerlas en la lista negra.
     """
     def process_request(self, request):
         # Importar aquí para evitar circular imports
         from apps.autenticacion.models import IPBlacklist
         
-        ip = self.get_client_ip(request)
+        ip = obtener_ip_cliente(request)
         
         if IPBlacklist.esta_bloqueada(ip):
             logger.warning(f"Intento de acceso desde IP bloqueada: {ip}")
             return JsonResponse({
                 'success': False,
-                'error': 'Acceso denegado.',
-                'detail': 'Tu dirección IP ha sido bloqueada.'
+                'error': Messages.IP_BLOCKED
             }, status=403)
         
         return None
-
-    @staticmethod
-    def get_client_ip(request):
-        """Obtiene la IP real del cliente"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
 
 
 class BruteForceProtectionMiddleware(MiddlewareMixin):
     """
     Middleware para protección contra ataques de fuerza bruta.
     Bloquea automáticamente IPs con demasiados intentos fallidos.
+    
+    NOTA: Los valores ahora se obtienen de SecurityConstants
     """
-    MAX_INTENTOS = 10  # Máximo de intentos fallidos
-    VENTANA_TIEMPO = 30  # En minutos
+    # Usar valores desde SecurityConstants
+    MAX_INTENTOS = SecurityConstants.MAX_INTENTOS_LOGIN
+    VENTANA_TIEMPO = SecurityConstants.VENTANA_TIEMPO_MINUTOS
 
     def process_request(self, request):
         # Solo aplicar a endpoints de autenticación
@@ -129,7 +108,7 @@ class BruteForceProtectionMiddleware(MiddlewareMixin):
         # Importar aquí para evitar circular imports
         from apps.autenticacion.models import LoginAttempt, IPBlacklist
         
-        ip = self.get_client_ip(request)
+        ip = obtener_ip_cliente(request)
         
         # Verificar intentos fallidos recientes
         intentos_fallidos = LoginAttempt.obtener_intentos_fallidos_recientes(
@@ -154,21 +133,10 @@ class BruteForceProtectionMiddleware(MiddlewareMixin):
             
             return JsonResponse({
                 'success': False,
-                'error': 'Demasiados intentos fallidos.',
-                'detail': f'Has excedido el límite de intentos. Tu IP ha sido bloqueada.'
+                'error': Messages.ACCOUNT_BLOCKED
             }, status=429)
         
         return None
-
-    @staticmethod
-    def get_client_ip(request):
-        """Obtiene la IP real del cliente"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
 
 
 class SecurityHeadersMiddleware(MiddlewareMixin):

@@ -1,10 +1,13 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.utils import timezone
+from types import SimpleNamespace
+
+from apps.autenticacion.utils.helpers import obtener_ip_cliente
+from core.constants import APIResponse, Messages, ProductStatus, ProductConfig
 
 from .models import Producto, ConfiguracionLente
 from .serializers import (
@@ -145,14 +148,14 @@ class ProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             producto=producto,
             usuario=request.user,
-            ip=self.get_client_ip(request)
+            ip=obtener_ip_cliente(request)
         )
         
         # Retornar con serializer de detalle
         response_serializer = ProductoDetalleSerializer(producto)
-        return Response(
-            response_serializer.data,
-            status=status.HTTP_201_CREATED
+        return APIResponse.created(
+            data=response_serializer.data,
+            message=Messages.PRODUCT_CREATED
         )
     
     def update(self, request, *args, **kwargs):
@@ -177,7 +180,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             producto=producto,
             usuario=request.user,
-            ip=self.get_client_ip(request),
+            ip=obtener_ip_cliente(request),
             cambios=cambios
         )
         
@@ -189,7 +192,10 @@ class ProductoViewSet(viewsets.ModelViewSet):
         if cambios:
             response_data['cambios_realizados'] = cambios
         
-        return Response(response_data)
+        return APIResponse.success(
+            data=response_data,
+            message=Messages.PRODUCT_UPDATED
+        )
     
     def partial_update(self, request, *args, **kwargs):
         """Actualización parcial (PATCH)"""
@@ -212,7 +218,6 @@ class ProductoViewSet(viewsets.ModelViewSet):
         
         # Emitir señal para bitácora
         # Como el objeto ya no existe, pasamos la info guardada
-        from types import SimpleNamespace
         producto_eliminado_data = SimpleNamespace(
             id_producto=producto_id,
             nombre=producto_nombre
@@ -222,13 +227,13 @@ class ProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             producto=producto_eliminado_data,
             usuario=request.user,
-            ip=self.get_client_ip(request),
-            motivo=request.data.get('motivo', 'Sin motivo especificado')
+            ip=obtener_ip_cliente(request),
+            motivo=request.data.get('motivo', Messages.NO_REASON_SPECIFIED)
         )
         
-        return Response(
-            {'message': 'Producto eliminado exitosamente'},
-            status=status.HTTP_204_NO_CONTENT
+        return APIResponse.success(
+            message=Messages.PRODUCT_DELETED,
+            status_code=status.HTTP_204_NO_CONTENT
         )
     
     @action(detail=True, methods=['patch'], url_path='cambiar-estado')
@@ -247,7 +252,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         
         nuevo_estado = serializer.validated_data['estado_producto']
-        motivo = serializer.validated_data.get('motivo', 'Sin motivo especificado')
+        motivo = serializer.validated_data.get('motivo', Messages.NO_REASON_SPECIFIED)
         
         # Guardar estado anterior
         estado_anterior = producto.estado_producto
@@ -261,20 +266,22 @@ class ProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             producto=producto,
             usuario=request.user,
-            ip=self.get_client_ip(request),
+            ip=obtener_ip_cliente(request),
             estado_anterior=estado_anterior,
             estado_nuevo=nuevo_estado,
             motivo=motivo
         )
         
-        return Response({
-            'id_producto': producto.id_producto,
-            'estado_producto': producto.estado_producto,
-            'estado_anterior': estado_anterior,
-            'motivo': motivo,
-            'message': 'Estado actualizado correctamente',
-            'visible_en_catalogo': nuevo_estado == 'ACTIVO'
-        })
+        return APIResponse.success(
+            data={
+                'id_producto': producto.id_producto,
+                'estado_producto': producto.estado_producto,
+                'estado_anterior': estado_anterior,
+                'motivo': motivo,
+                'visible_en_catalogo': nuevo_estado == ProductStatus.ACTIVO
+            },
+            message=Messages.PRODUCT_STATE_CHANGED
+        )
     
     @action(detail=True, methods=['post'], url_path='ajustar-stock')
     def ajustar_stock(self, request, pk=None):
@@ -300,21 +307,20 @@ class ProductoViewSet(viewsets.ModelViewSet):
         stock_anterior = producto.stock
         
         # Realizar ajuste
-        if tipo_ajuste == 'INCREMENTO':
+        if tipo_ajuste == ProductConfig.STOCK_INCREMENT:
             producto.stock += cantidad
-        elif tipo_ajuste == 'DECREMENTO':
+        elif tipo_ajuste == ProductConfig.STOCK_DECREMENT:
             if producto.stock < cantidad:
-                return Response(
-                    {
-                        'detail': 'Stock insuficiente para el ajuste',
+                return APIResponse.bad_request(
+                    data={
                         'stock_actual': producto.stock,
                         'cantidad_solicitada': cantidad,
                         'deficit': cantidad - producto.stock
                     },
-                    status=status.HTTP_400_BAD_REQUEST
+                    message=Messages.PRODUCT_STOCK_INSUFFICIENT
                 )
             producto.stock -= cantidad
-        elif tipo_ajuste == 'CORRECCION':
+        elif tipo_ajuste == ProductConfig.STOCK_CORRECTION:
             producto.stock = cantidad
         
         producto.save()
@@ -324,7 +330,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             producto=producto,
             usuario=request.user,
-            ip=self.get_client_ip(request),
+            ip=obtener_ip_cliente(request),
             tipo_ajuste=tipo_ajuste,
             cantidad=cantidad,
             stock_anterior=stock_anterior,
@@ -332,26 +338,19 @@ class ProductoViewSet(viewsets.ModelViewSet):
             motivo=motivo
         )
         
-        return Response({
-            'id_producto': producto.id_producto,
-            'stock_anterior': stock_anterior,
-            'stock_nuevo': producto.stock,
-            'ajuste': cantidad if tipo_ajuste != 'CORRECCION' else producto.stock - stock_anterior,
-            'tipo_ajuste': tipo_ajuste,
-            'motivo': motivo,
-            'fecha_ajuste': timezone.now(),
-            'usuario': request.user.nombre_usuario,
-            'message': 'Stock ajustado exitosamente'
-        })
-    
-    def get_client_ip(self, request):
-        """Obtener IP real del cliente"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+        return APIResponse.success(
+            data={
+                'id_producto': producto.id_producto,
+                'stock_anterior': stock_anterior,
+                'stock_nuevo': producto.stock,
+                'ajuste': cantidad if tipo_ajuste != ProductConfig.STOCK_CORRECTION else producto.stock - stock_anterior,
+                'tipo_ajuste': tipo_ajuste,
+                'motivo': motivo,
+                'fecha_ajuste': timezone.now(),
+                'usuario': request.user.nombre_usuario,
+            },
+            message=Messages.PRODUCT_STOCK_ADJUSTED
+        )
 
 class ProductoConImagenViewSet(viewsets.ModelViewSet):
     queryset = Producto.objects.all()

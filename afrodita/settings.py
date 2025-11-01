@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'cloudinary_storage',
 
     # Local apps
+    'apps.seguridad',       # Sistema de roles y permisos
     'apps.autenticacion',
     'apps.usuarios',
     'apps.productos',

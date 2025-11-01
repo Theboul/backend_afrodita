@@ -57,6 +57,30 @@ imagen_principal_cambiada = Signal()  # args: imagen, usuario, ip
 imagen_restaurada = Signal()          # args: imagen, usuario, ip
 imagen_reordenada = Signal()          # args: imagen, usuario, ip, orden_anterior, orden_nuevo
 
+# --- GESTIÓN DE DIRECCIONES DE CLIENTES ---
+direccion_creada = Signal()           # args: direccion, usuario, ip, es_admin
+direccion_actualizada = Signal()      # args: direccion, usuario, ip, cambios, es_admin
+direccion_eliminada = Signal()        # args: direccion, usuario, ip, es_admin
+direccion_principal_cambiada = Signal()  # args: direccion, usuario, ip, es_admin
+
+# Gestión de Roles
+rol_creado = Signal()           # args: rol, usuario, ip
+rol_actualizado = Signal()      # args: rol, usuario, ip, cambios
+rol_eliminado = Signal()        # args: rol, usuario, ip, motivo
+
+# Gestión de Permisos
+permiso_creado = Signal()       # args: permiso, usuario, ip
+permiso_actualizado = Signal()  # args: permiso, usuario, ip, cambios
+permiso_eliminado = Signal()    # args: permiso, usuario, ip
+
+# Asignación Rol-Permiso
+permiso_asignado_a_rol = Signal()     # args: rol, permiso, usuario, ip
+permiso_removido_de_rol = Signal()    # args: rol, permiso, usuario, ip
+
+# Asignación Usuario-Permiso
+permiso_concedido_a_usuario = Signal()  # args: usuario_afectado, permiso, usuario_ejecutor, ip, motivo
+permiso_revocado_a_usuario = Signal()   # args: usuario_afectado, permiso, usuario_ejecutor, ip, motivo
+
 
 # =====================================================
 # RECEIVERS: AUTENTICACIÓN Y SESIONES
@@ -584,3 +608,286 @@ def registrar_imagen_actualizada(sender, imagen, usuario, ip, cambios, **kwargs)
         ip=ip,
         usuario=usuario
     )
+
+
+# =====================================================
+# RECEIVERS: GESTIÓN DE DIRECCIONES DE CLIENTES
+# =====================================================
+@receiver(direccion_creada)
+def registrar_direccion_creada(sender, direccion, usuario, ip, es_admin=False, **kwargs):
+    """Registra la creación de una dirección de cliente"""
+    # Obtener información del cliente
+    cliente_usuario = obtener_atributo_seguro(
+        direccion.id_cliente.id_cliente if hasattr(direccion.id_cliente, 'id_cliente') else direccion.id_cliente,
+        'nombre_usuario',
+        'Cliente desconocido'
+    )
+    
+    tipo_accion = "ADMIN" if es_admin else "CLIENTE"
+    accion_por = f"por el administrador {usuario.nombre_usuario}" if es_admin else "por el cliente"
+    
+    descripcion = (
+        f"[{tipo_accion}] Dirección creada {accion_por} para el cliente '{cliente_usuario}' | "
+        f"Departamento: {direccion.departamento}, Municipio: {direccion.municipio}, "
+        f"Principal: {'Sí' if direccion.es_principal else 'No'}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="ADDRESS_CREATE",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(direccion_actualizada)
+def registrar_direccion_actualizada(sender, direccion, usuario, ip, cambios, es_admin=False, **kwargs):
+    """Registra la actualización de una dirección de cliente"""
+    # Obtener información del cliente
+    cliente_usuario = obtener_atributo_seguro(
+        direccion.id_cliente.id_cliente if hasattr(direccion.id_cliente, 'id_cliente') else direccion.id_cliente,
+        'nombre_usuario',
+        'Cliente desconocido'
+    )
+    
+    # Formatear cambios
+    campos = formatear_cambios(cambios)
+    
+    tipo_accion = "ADMIN" if es_admin else "CLIENTE"
+    accion_por = f"por el administrador {usuario.nombre_usuario}" if es_admin else "por el cliente"
+    
+    descripcion = (
+        f"[{tipo_accion}] Dirección del cliente '{cliente_usuario}' actualizada {accion_por} | "
+        f"Cambios: {campos}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="ADDRESS_UPDATE",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(direccion_eliminada)
+def registrar_direccion_eliminada(sender, direccion, usuario, ip, es_admin=False, **kwargs):
+    """Registra la eliminación (soft delete) de una dirección de cliente"""
+    # Obtener información del cliente
+    cliente_usuario = obtener_atributo_seguro(
+        direccion.id_cliente.id_cliente if hasattr(direccion.id_cliente, 'id_cliente') else direccion.id_cliente,
+        'nombre_usuario',
+        'Cliente desconocido'
+    )
+    
+    tipo_accion = "ADMIN" if es_admin else "CLIENTE"
+    accion_por = f"por el administrador {usuario.nombre_usuario}" if es_admin else "por el cliente"
+    
+    descripcion = (
+        f"[{tipo_accion}] Dirección del cliente '{cliente_usuario}' eliminada {accion_por} | "
+        f"Ubicación: {direccion.departamento}, {direccion.municipio}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="ADDRESS_DELETE",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(direccion_principal_cambiada)
+def registrar_direccion_principal_cambiada(sender, direccion, usuario, ip, es_admin=False, **kwargs):
+    """Registra el cambio de dirección principal de un cliente"""
+    # Obtener información del cliente
+    cliente_usuario = obtener_atributo_seguro(
+        direccion.id_cliente.id_cliente if hasattr(direccion.id_cliente, 'id_cliente') else direccion.id_cliente,
+        'nombre_usuario',
+        'Cliente desconocido'
+    )
+    
+    tipo_accion = "ADMIN" if es_admin else "CLIENTE"
+    accion_por = f"por el administrador {usuario.nombre_usuario}" if es_admin else "por el cliente"
+    
+    descripcion = (
+        f"[{tipo_accion}] Dirección principal del cliente '{cliente_usuario}' cambiada {accion_por} | "
+        f"Nueva dirección principal: {direccion.departamento}, {direccion.municipio}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="ADDRESS_SET_PRINCIPAL",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+# =====================================================
+# RECEIVERS: GESTIÓN DE ROLES Y PERMISOS
+# =====================================================
+
+@receiver(rol_creado)
+def registrar_rol_creado(sender, rol, usuario, **kwargs):
+    """Registra la creación de un nuevo rol"""
+    descripcion = (
+        f"Rol '{rol.nombre}' creado por {usuario.nombre_usuario} | "
+        f"Tipo: {'Sistema' if rol.es_sistema else 'Personalizado'} | "
+        f"Descripción: {rol.descripcion or 'Sin descripción'}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="ROLE_CREATED",
+        descripcion=descripcion,
+        ip=None,  # Se obtiene desde el logger
+        usuario=usuario
+    )
+
+
+@receiver(rol_actualizado)
+def registrar_rol_actualizado(sender, rol, usuario, **kwargs):
+    """Registra la actualización de un rol"""
+    descripcion = (
+        f"Rol '{rol.nombre}' actualizado por {usuario.nombre_usuario} | "
+        f"Estado: {'Activo' if rol.activo else 'Inactivo'} | "
+        f"Permisos asignados: {rol.permisos.count()}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="ROLE_UPDATED",
+        descripcion=descripcion,
+        ip=None,
+        usuario=usuario
+    )
+
+
+@receiver(rol_eliminado)
+def registrar_rol_eliminado(sender, rol_nombre, usuario, **kwargs):
+    """Registra la eliminación de un rol"""
+    descripcion = f"Rol '{rol_nombre}' eliminado por {usuario.nombre_usuario}"
+    
+    AuditoriaLogger.registrar_evento(
+        accion="ROLE_DELETED",
+        descripcion=descripcion,
+        ip=None,
+        usuario=usuario
+    )
+
+
+@receiver(permiso_creado)
+def registrar_permiso_creado(sender, permiso, usuario, **kwargs):
+    """Registra la creación de un nuevo permiso"""
+    descripcion = (
+        f"Permiso '{permiso.nombre}' creado por {usuario.nombre_usuario} | "
+        f"Código: {permiso.codigo} | "
+        f"Módulo: {permiso.modulo}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="PERMISSION_CREATED",
+        descripcion=descripcion,
+        ip=None,
+        usuario=usuario
+    )
+
+
+@receiver(permiso_actualizado)
+def registrar_permiso_actualizado(sender, permiso, usuario, **kwargs):
+    """Registra la actualización de un permiso"""
+    descripcion = (
+        f"Permiso '{permiso.nombre}' actualizado por {usuario.nombre_usuario} | "
+        f"Código: {permiso.codigo} | "
+        f"Estado: {'Activo' if permiso.activo else 'Inactivo'}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="PERMISSION_UPDATED",
+        descripcion=descripcion,
+        ip=None,
+        usuario=usuario
+    )
+
+
+@receiver(permiso_eliminado)
+def registrar_permiso_eliminado(sender, permiso_nombre, usuario, **kwargs):
+    """Registra la eliminación de un permiso"""
+    descripcion = f"Permiso '{permiso_nombre}' eliminado por {usuario.nombre_usuario}"
+    
+    AuditoriaLogger.registrar_evento(
+        accion="PERMISSION_DELETED",
+        descripcion=descripcion,
+        ip=None,
+        usuario=usuario
+    )
+
+
+@receiver(permiso_asignado_a_rol)
+def registrar_permiso_asignado_a_rol(sender, rol, permiso, usuario, **kwargs):
+    """Registra la asignación de un permiso a un rol"""
+    descripcion = (
+        f"Permiso '{permiso.nombre}' ({permiso.codigo}) asignado al rol '{rol.nombre}' "
+        f"por {usuario.nombre_usuario}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="PERMISSION_ASSIGNED_TO_ROLE",
+        descripcion=descripcion,
+        ip=None,
+        usuario=usuario
+    )
+
+
+@receiver(permiso_removido_de_rol)
+def registrar_permiso_removido_de_rol(sender, rol, permiso, usuario, **kwargs):
+    """Registra la remoción de un permiso de un rol"""
+    descripcion = (
+        f"Permiso '{permiso.nombre}' ({permiso.codigo}) removido del rol '{rol.nombre}' "
+        f"por {usuario.nombre_usuario}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="PERMISSION_REMOVED_FROM_ROLE",
+        descripcion=descripcion,
+        ip=None,
+        usuario=usuario
+    )
+
+
+@receiver(permiso_concedido_a_usuario)
+def registrar_permiso_concedido_a_usuario(sender, usuario_permiso, otorgado_por, **kwargs):
+    """Registra la concesión de un permiso individual a un usuario"""
+    usuario_afectado = usuario_permiso.usuario
+    permiso = usuario_permiso.permiso
+    
+    descripcion = (
+        f"Permiso individual '{permiso.nombre}' ({permiso.codigo}) concedido a "
+        f"'{usuario_afectado.nombre_completo}' por {otorgado_por.nombre_usuario} | "
+        f"Motivo: {usuario_permiso.motivo} | "
+        f"Expira: {usuario_permiso.fecha_expiracion or 'Sin expiración'}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="PERMISSION_GRANTED_TO_USER",
+        descripcion=descripcion,
+        ip=None,
+        usuario=otorgado_por
+    )
+
+
+@receiver(permiso_revocado_a_usuario)
+def registrar_permiso_revocado_a_usuario(sender, usuario_permiso, revocado_por, **kwargs):
+    """Registra la revocación de un permiso individual de un usuario"""
+    usuario_afectado = usuario_permiso.usuario
+    permiso = usuario_permiso.permiso
+    
+    descripcion = (
+        f"Permiso '{permiso.nombre}' ({permiso.codigo}) revocado de "
+        f"'{usuario_afectado.nombre_completo}' por {revocado_por.nombre_usuario} | "
+        f"Motivo: {usuario_permiso.motivo}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="PERMISSION_REVOKED_FROM_USER",
+        descripcion=descripcion,
+        ip=None,
+        usuario=revocado_por
+    )
+

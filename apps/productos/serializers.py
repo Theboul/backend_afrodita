@@ -5,10 +5,12 @@ from apps.imagenes.models import ImagenProducto
 from apps.imagenes.serializers import ImagenProductoSerializer
 from rest_framework.pagination import PageNumberPagination
 
+from core.constants import Messages, ProductConfig, ProductStatus, ImageStatus
+
 class ProductoPagination(PageNumberPagination):
-    page_size = 9           # Cantidad de productos por página
-    page_size_query_param = 'page_size'  # Permite cambiar por query param
-    max_page_size = 50      # Límite máximo
+    page_size = ProductConfig.PRODUCTS_PAGE_SIZE
+    page_size_query_param = 'page_size'
+    max_page_size = ProductConfig.PRODUCTS_PAGE_SIZE_MAX
 
 # ==========================================================
 # SERIALIZERS AUXILIARES
@@ -75,7 +77,7 @@ class ProductoConImagenSerializer(serializers.ModelSerializer):
 
     def get_imagen_principal(self, obj):
         imagen = ImagenProducto.objects.filter(
-            id_producto=obj, es_principal=True, estado_imagen="ACTIVA"
+            id_producto=obj, es_principal=True, estado_imagen=ImageStatus.ACTIVA
         ).first()
         if imagen:
             return ImagenProductoSerializer(imagen).data
@@ -152,19 +154,19 @@ class CrearProductoSerializer(serializers.ModelSerializer):
     def validate_id_producto(self, value):
         """Valida que el ID sea único"""
         if Producto.objects.filter(id_producto=value).exists():
-            raise serializers.ValidationError("Ya existe un producto con este ID")
+            raise serializers.ValidationError(Messages.PRODUCT_ID_EXISTS)
         return value.upper()  # Convertir a mayúsculas
     
     def validate_precio(self, value):
         """Valida que el precio sea positivo"""
         if value <= 0:
-            raise serializers.ValidationError("El precio debe ser mayor a 0")
+            raise serializers.ValidationError(Messages.PRODUCT_PRICE_INVALID)
         return value
     
     def validate_stock(self, value):
         """Valida que el stock no sea negativo"""
         if value < 0:
-            raise serializers.ValidationError("El stock no puede ser negativo")
+            raise serializers.ValidationError(Messages.PRODUCT_STOCK_NEGATIVE)
         return value
     
     def validate(self, attrs):
@@ -173,7 +175,7 @@ class CrearProductoSerializer(serializers.ModelSerializer):
         categoria = attrs.get('id_categoria')
         if not categoria:
             raise serializers.ValidationError({
-                'id_categoria': 'La categoría es requerida'
+                'id_categoria': Messages.PRODUCT_CATEGORY_REQUIRED
             })
         
         # Validar que si tiene configuración, esta exista
@@ -182,7 +184,7 @@ class CrearProductoSerializer(serializers.ModelSerializer):
             id_configuracion=configuracion.id_configuracion
         ).exists():
             raise serializers.ValidationError({
-                'id_configuracion': 'La configuración seleccionada no existe'
+                'id_configuracion': Messages.PRODUCT_CONFIG_NOT_EXISTS
             })
         
         return attrs
@@ -205,12 +207,12 @@ class ActualizarProductoSerializer(serializers.ModelSerializer):
     
     def validate_precio(self, value):
         if value <= 0:
-            raise serializers.ValidationError("El precio debe ser mayor a 0")
+            raise serializers.ValidationError(Messages.PRODUCT_PRICE_INVALID)
         return value
     
     def validate_stock(self, value):
         if value < 0:
-            raise serializers.ValidationError("El stock no puede ser negativo")
+            raise serializers.ValidationError(Messages.PRODUCT_STOCK_NEGATIVE)
         return value
     
     def update(self, instance, validated_data):
@@ -246,7 +248,7 @@ class ActualizarProductoSerializer(serializers.ModelSerializer):
 class CambiarEstadoSerializer(serializers.Serializer):
     """Serializer para cambiar estado del producto"""
     estado_producto = serializers.ChoiceField(
-        choices=['ACTIVO', 'INACTIVO'],
+        choices=ProductStatus.choices(),
         required=True
     )
     motivo = serializers.CharField(
@@ -257,19 +259,16 @@ class CambiarEstadoSerializer(serializers.Serializer):
     
     def validate_estado_producto(self, value):
         """Valida que el estado sea válido"""
-        if value not in ['ACTIVO', 'INACTIVO']:
-            raise serializers.ValidationError(
-                "Estado inválido. Use ACTIVO o INACTIVO"
-            )
+        if not ProductStatus.is_valid(value):
+            raise serializers.ValidationError(Messages.PRODUCT_STATE_INVALID)
         return value
 
 
 class AjustarStockSerializer(serializers.Serializer):
     """Serializer para ajustar stock del producto"""
-    TIPOS_AJUSTE = ['INCREMENTO', 'DECREMENTO', 'CORRECCION']
     
     tipo_ajuste = serializers.ChoiceField(
-        choices=TIPOS_AJUSTE,
+        choices=ProductConfig.STOCK_ADJUSTMENT_TYPES,
         required=True
     )
     cantidad = serializers.IntegerField(
@@ -282,23 +281,21 @@ class AjustarStockSerializer(serializers.Serializer):
     )
     
     def validate_tipo_ajuste(self, value):
-        if value not in self.TIPOS_AJUSTE:
+        if not ProductConfig.is_valid_adjustment(value):
             raise serializers.ValidationError(
-                f"Tipo de ajuste inválido. Use: {', '.join(self.TIPOS_AJUSTE)}"
+                Messages.PRODUCT_ADJUSTMENT_INVALID.format(
+                    types=', '.join(ProductConfig.STOCK_ADJUSTMENT_TYPES)
+                )
             )
         return value
     
     def validate(self, attrs):
         """Validaciones cruzadas"""
-        tipo = attrs.get('tipo_ajuste')
         cantidad = attrs.get('cantidad')
-        
-        # Si es decremento, validar en el método de ajuste
-        # (necesitamos el stock actual que está en la instancia)
         
         if cantidad < 0:
             raise serializers.ValidationError({
-                'cantidad': 'La cantidad no puede ser negativa'
+                'cantidad': Messages.PRODUCT_QUANTITY_NEGATIVE
             })
         
         return attrs

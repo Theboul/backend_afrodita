@@ -14,6 +14,7 @@ def api_root(request, format=None):
     return Response({
         "auth": request.build_absolute_uri("/api/auth/"),
         "usuarios": request.build_absolute_uri("/api/usuarios/"),
+        "seguridad": request.build_absolute_uri("/api/seguridad/"),  # 🆕 Nuevo módulo
         "categorias": request.build_absolute_uri("/api/categorias/"),
         "productos": request.build_absolute_uri("/api/productos/"),
         "ventas": request.build_absolute_uri("/api/ventas/"),
@@ -36,6 +37,7 @@ urlpatterns = [
     # Módulos
     path("api/auth/", include("apps.autenticacion.urls")),
     path("api/usuarios/", include("apps.usuarios.urls")),
+    path("api/seguridad/", include("apps.seguridad.urls")),  # 🆕 Gestión de Roles y Permisos
     path("api/categorias/", include("apps.categoria.urls")),
     path("api/productos/", include("apps.productos.urls")),
     path("api/ventas/", include("apps.ventas.urls")),

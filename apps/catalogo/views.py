@@ -3,12 +3,13 @@ from django.shortcuts import render
 # apps/catalogo/views.py
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Q, Count
+import math
 
 from apps.productos.models import Producto, ConfiguracionLente, Medida
 from apps.categoria.models import Categoria
+from core.constants import APIResponse, Messages, ProductStatus, CategoryStatus, CatalogConfig
 from .serializers import (
     ProductoCatalogoListSerializer,
     ProductoCatalogoDetalleSerializer,
@@ -44,32 +45,34 @@ def obtener_filtros_disponibles(request):
     """
     # Categorías con productos activos y stock
     categorias = Categoria.objects.filter(
-        estado_categoria='ACTIVA',
-        productos__estado_producto='ACTIVO',
+        estado_categoria=CategoryStatus.ACTIVA,
+        productos__estado_producto=ProductStatus.ACTIVO,
         productos__stock__gt=0
     ).distinct().order_by('nombre')
     
     # Colores disponibles (de productos activos con stock)
     colores = ConfiguracionLente.objects.filter(
-        productos__estado_producto='ACTIVO',
+        productos__estado_producto=ProductStatus.ACTIVO,
         productos__stock__gt=0
     ).values_list('color', flat=True).distinct().order_by('color')
     
     # Medidas disponibles (de productos activos con stock)
     medidas = Medida.objects.filter(
-        configuraciones__productos__estado_producto='ACTIVO',
+        configuraciones__productos__estado_producto=ProductStatus.ACTIVO,
         configuraciones__productos__stock__gt=0
     ).distinct().order_by('medida')
     
-    return Response({
-        'categorias': CategoriaCatalogoSerializer(categorias, many=True).data,
-        'colores': list(colores),
-        'medidas': MedidaCatalogoSerializer(medidas, many=True).data,
-        'total_categorias': categorias.count(),
-        'total_colores': len(colores),
-        'total_medidas': medidas.count(),
-        'mensaje': 'Filtros disponibles cargados exitosamente'
-    }, status=status.HTTP_200_OK)
+    return APIResponse.success(
+        data={
+            'categorias': CategoriaCatalogoSerializer(categorias, many=True).data,
+            'colores': list(colores),
+            'medidas': MedidaCatalogoSerializer(medidas, many=True).data,
+            'total_categorias': categorias.count(),
+            'total_colores': len(colores),
+            'total_medidas': medidas.count(),
+        },
+        message=Messages.FILTERS_LOADED
+    )
 
 
 @api_view(['GET'])
@@ -96,46 +99,43 @@ def obtener_colores_por_categoria(request):
     categoria_id = request.query_params.get('categoria')
     
     if not categoria_id:
-        return Response(
-            {'error': 'Debe proporcionar el parámetro "categoria"'},
-            status=status.HTTP_400_BAD_REQUEST
+        return APIResponse.bad_request(
+            message=Messages.CATEGORY_PARAM_REQUIRED
         )
     
     # Verificar que la categoría existe y está activa
     try:
         categoria = Categoria.objects.get(
             id_categoria=categoria_id,
-            estado_categoria='ACTIVA'
+            estado_categoria=CategoryStatus.ACTIVA
         )
     except Categoria.DoesNotExist:
-        return Response(
-            {'error': 'La categoría seleccionada no existe o no está activa'},
-            status=status.HTTP_404_NOT_FOUND
+        return APIResponse.not_found(
+            message=Messages.CATEGORY_NOT_ACTIVE
         )
     
     # Obtener colores disponibles para esa categoría
     colores = ConfiguracionLente.objects.filter(
         productos__id_categoria_id=categoria_id,
-        productos__estado_producto='ACTIVO',
+        productos__estado_producto=ProductStatus.ACTIVO,
         productos__stock__gt=0
     ).values_list('color', flat=True).distinct().order_by('color')
     
     if not colores:
-        return Response(
-            {
+        return APIResponse.success(
+            data={
                 'categoria': CategoriaCatalogoSerializer(categoria).data,
                 'colores': [],
                 'total_colores': 0,
-                'mensaje': 'No hay productos disponibles en esta categoría'
             },
-            status=status.HTTP_200_OK
+            message=Messages.NO_PRODUCTS_IN_CATEGORY
         )
     
     # Contar productos por color
     colores_data = []
     for color in colores:
         count = Producto.objects.filter(
-            estado_producto='ACTIVO',
+            estado_producto=ProductStatus.ACTIVO,
             stock__gt=0,
             id_categoria_id=categoria_id,
             id_configuracion__color=color
@@ -146,11 +146,13 @@ def obtener_colores_por_categoria(request):
             'productos_disponibles': count
         })
     
-    return Response({
-        'categoria': CategoriaCatalogoSerializer(categoria).data,
-        'colores': colores_data,
-        'total_colores': len(colores_data)
-    }, status=status.HTTP_200_OK)
+    return APIResponse.success(
+        data={
+            'categoria': CategoriaCatalogoSerializer(categoria).data,
+            'colores': colores_data,
+            'total_colores': len(colores_data)
+        }
+    )
 
 
 @api_view(['GET'])
@@ -160,7 +162,7 @@ def obtener_medidas_por_color(request):
     GET /api/catalogo/medidas-por-color/?color=Azul
     GET /api/catalogo/medidas-por-color/?color=Azul&categoria=1
     
-    ⭐ ENDPOINT CLAVE PARA FILTROS DEPENDIENTES ⭐
+    ENDPOINT CLAVE PARA FILTROS DEPENDIENTES
     
     Retorna las medidas disponibles para un color (tono) específico.
     Opcionalmente puede filtrarse también por categoría.
@@ -192,32 +194,30 @@ def obtener_medidas_por_color(request):
     categoria_id = request.query_params.get('categoria')
     
     if not color:
-        return Response(
-            {'error': 'Debe proporcionar el parámetro "color"'},
-            status=status.HTTP_400_BAD_REQUEST
+        return APIResponse.bad_request(
+            message=Messages.COLOR_PARAM_REQUIRED
         )
     
     # Validar que el color existe en productos activos con stock
     if not ConfiguracionLente.objects.filter(
         color=color,
-        productos__estado_producto='ACTIVO',
+        productos__estado_producto=ProductStatus.ACTIVO,
         productos__stock__gt=0
     ).exists():
-        return Response(
-            {
+        return APIResponse.success(
+            data={
                 'color': color,
                 'categoria_id': categoria_id,
                 'medidas': [],
                 'total_medidas': 0,
-                'mensaje': 'No hay productos disponibles en este tono'
             },
-            status=status.HTTP_200_OK
+            message=Messages.NO_PRODUCTS_IN_COLOR
         )
     
     # Base queryset: medidas de ese color con stock
     queryset = Medida.objects.filter(
         configuraciones__color=color,
-        configuraciones__productos__estado_producto='ACTIVO',
+        configuraciones__productos__estado_producto=ProductStatus.ACTIVO,
         configuraciones__productos__stock__gt=0
     )
     
@@ -230,26 +230,25 @@ def obtener_medidas_por_color(request):
     medidas = queryset.distinct().order_by('medida')
     
     if not medidas.exists():
-        mensaje = 'No hay medidas asociadas a este tono'
+        mensaje = Messages.NO_MEASURES_FOR_COLOR
         if categoria_id:
-            mensaje += f' en la categoría seleccionada'
+            mensaje = Messages.NO_MEASURES_IN_CATEGORY
         
-        return Response(
-            {
+        return APIResponse.success(
+            data={
                 'color': color,
                 'categoria_id': categoria_id,
                 'medidas': [],
                 'total_medidas': 0,
-                'mensaje': mensaje
             },
-            status=status.HTTP_200_OK
+            message=mensaje
         )
     
     # Contar productos por medida
     medidas_data = []
     for medida in medidas:
         count_productos = Producto.objects.filter(
-            estado_producto='ACTIVO',
+            estado_producto=ProductStatus.ACTIVO,
             stock__gt=0,
             id_configuracion__color=color,
             id_configuracion__id_medida=medida
@@ -265,12 +264,14 @@ def obtener_medidas_por_color(request):
             'productos_disponibles': count_productos.count()
         })
     
-    return Response({
-        'color': color,
-        'categoria_id': categoria_id,
-        'medidas': medidas_data,
-        'total_medidas': len(medidas_data)
-    }, status=status.HTTP_200_OK)
+    return APIResponse.success(
+        data={
+            'color': color,
+            'categoria_id': categoria_id,
+            'medidas': medidas_data,
+            'total_medidas': len(medidas_data)
+        }
+    )
 
 
 @api_view(['GET'])
@@ -312,7 +313,7 @@ def buscar_productos(request):
     """
     # Iniciar con productos activos y con stock
     queryset = Producto.objects.filter(
-        estado_producto='ACTIVO',
+        estado_producto=ProductStatus.ACTIVO,
         stock__gt=0
     ).select_related(
         'id_categoria',
@@ -363,15 +364,15 @@ def buscar_productos(request):
             pass
     
     # === ORDENAMIENTO ===
-    orden = request.query_params.get('orden', 'nombre')
+    orden = request.query_params.get('orden', CatalogConfig.get_default_sort())
     
-    if orden == 'precio_asc':
+    if orden == CatalogConfig.SORT_PRECIO_ASC:
         queryset = queryset.order_by('precio')
-    elif orden == 'precio_desc':
+    elif orden == CatalogConfig.SORT_PRECIO_DESC:
         queryset = queryset.order_by('-precio')
-    elif orden == 'nombre':
+    elif orden == CatalogConfig.SORT_NOMBRE:
         queryset = queryset.order_by('nombre')
-    elif orden == 'recientes':
+    elif orden == CatalogConfig.SORT_RECIENTES:
         queryset = queryset.order_by('-fecha_creacion')
     else:
         queryset = queryset.order_by('nombre')
@@ -380,18 +381,18 @@ def buscar_productos(request):
     total_productos = queryset.count()
     
     try:
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 12))
+        page = int(request.query_params.get('page', CatalogConfig.PAGE_MIN))
+        page_size = int(request.query_params.get('page_size', CatalogConfig.PAGE_SIZE_DEFAULT))
     except ValueError:
-        page = 1
-        page_size = 12
+        page = CatalogConfig.PAGE_MIN
+        page_size = CatalogConfig.PAGE_SIZE_DEFAULT
     
     # Validar página
-    if page < 1:
-        page = 1
+    if page < CatalogConfig.PAGE_MIN:
+        page = CatalogConfig.PAGE_MIN
     
-    if page_size < 1 or page_size > 100:
-        page_size = 12
+    if page_size < CatalogConfig.PAGE_MIN or page_size > CatalogConfig.PAGE_SIZE_MAX:
+        page_size = CatalogConfig.PAGE_SIZE_DEFAULT
     
     start = (page - 1) * page_size
     end = start + page_size
@@ -399,30 +400,31 @@ def buscar_productos(request):
     productos_paginados = queryset[start:end]
     
     # Calcular total de páginas
-    import math
     total_paginas = math.ceil(total_productos / page_size) if total_productos > 0 else 1
     
     # === SERIALIZAR ===
     serializer = ProductoCatalogoListSerializer(productos_paginados, many=True)
     
-    return Response({
-        'resultados': serializer.data,
-        'total': total_productos,
-        'pagina_actual': page,
-        'productos_por_pagina': page_size,
-        'total_paginas': total_paginas,
-        'tiene_siguiente': page < total_paginas,
-        'tiene_anterior': page > 1,
-        'filtros_aplicados': {
-            'categoria': categoria_id,
-            'color': color,
-            'medida': medida_id,
-            'search': search,
-            'precio_min': precio_min,
-            'precio_max': precio_max,
-            'orden': orden
+    return APIResponse.success(
+        data={
+            'resultados': serializer.data,
+            'total': total_productos,
+            'pagina_actual': page,
+            'productos_por_pagina': page_size,
+            'total_paginas': total_paginas,
+            'tiene_siguiente': page < total_paginas,
+            'tiene_anterior': page > 1,
+            'filtros_aplicados': {
+                'categoria': categoria_id,
+                'color': color,
+                'medida': medida_id,
+                'search': search,
+                'precio_min': precio_min,
+                'precio_max': precio_max,
+                'orden': orden
+            }
         }
-    }, status=status.HTTP_200_OK)
+    )
 
 
 @api_view(['GET'])
@@ -445,16 +447,15 @@ def obtener_detalle_producto(request, id_producto):
             'id_configuracion__id_medida'
         ).prefetch_related('imagenes').get(
             id_producto=id_producto,
-            estado_producto='ACTIVO'
+            estado_producto=ProductStatus.ACTIVO
         )
     except Producto.DoesNotExist:
-        return Response(
-            {'error': 'Producto no encontrado o no disponible'},
-            status=status.HTTP_404_NOT_FOUND
+        return APIResponse.not_found(
+            message=Messages.PRODUCT_NOT_AVAILABLE
         )
     
     serializer = ProductoCatalogoDetalleSerializer(producto)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    return APIResponse.success(data=serializer.data)
 
 
 @api_view(['GET'])
@@ -475,30 +476,32 @@ def obtener_estadisticas_catalogo(request):
         "productos_sin_stock": 3
     }
     """
-    total_productos = Producto.objects.filter(estado_producto='ACTIVO').count()
+    total_productos = Producto.objects.filter(estado_producto=ProductStatus.ACTIVO).count()
     productos_con_stock = Producto.objects.filter(
-        estado_producto='ACTIVO',
+        estado_producto=ProductStatus.ACTIVO,
         stock__gt=0
     ).count()
     productos_sin_stock = total_productos - productos_con_stock
     
     total_categorias = Categoria.objects.filter(
-        estado_categoria='ACTIVA',
-        productos__estado_producto='ACTIVO'
+        estado_categoria=CategoryStatus.ACTIVA,
+        productos__estado_producto=ProductStatus.ACTIVO
     ).distinct().count()
     
     total_colores = ConfiguracionLente.objects.filter(
-        productos__estado_producto='ACTIVO'
+        productos__estado_producto=ProductStatus.ACTIVO
     ).values('color').distinct().count()
     
-    return Response({
-        'total_productos': total_productos,
-        'total_categorias': total_categorias,
-        'total_colores': total_colores,
-        'productos_con_stock': productos_con_stock,
-        'productos_sin_stock': productos_sin_stock,
-        'porcentaje_disponibilidad': round(
-            (productos_con_stock / total_productos * 100) if total_productos > 0 else 0,
-            2
-        )
-    }, status=status.HTTP_200_OK)
+    return APIResponse.success(
+        data={
+            'total_productos': total_productos,
+            'total_categorias': total_categorias,
+            'total_colores': total_colores,
+            'productos_con_stock': productos_con_stock,
+            'productos_sin_stock': productos_sin_stock,
+            'porcentaje_disponibilidad': round(
+                (productos_con_stock / total_productos * 100) if total_productos > 0 else 0,
+                2
+            )
+        }
+    )

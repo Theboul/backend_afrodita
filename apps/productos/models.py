@@ -1,5 +1,7 @@
 from django.db import models
 
+from core.constants import ProductStatus, ProductConfig
+
 # ==========================================================
 # TABLA: medida
 # ==========================================================
@@ -83,10 +85,10 @@ class Producto(models.Model):
     
     @property
     def stock_bajo(self):
-        """Considera stock bajo si es menor a 10 unidades"""
-        return 0 < self.stock < 10
+        """Considera stock bajo si es menor al umbral configurado"""
+        return 0 < self.stock < ProductConfig.STOCK_LOW_THRESHOLD
     
     @property
     def esta_activo(self):
         """Verifica si el producto está activo"""
-        return self.estado_producto == 'ACTIVO'
+        return self.estado_producto == ProductStatus.ACTIVO

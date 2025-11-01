@@ -17,7 +17,8 @@ from apps.bitacora.signals import (
     categoria_actualizada,
     categoria_movida
 )
-from apps.bitacora.utils import get_client_ip_from_request as _get_client_ip
+from apps.autenticacion.utils import obtener_ip_cliente
+from core.constants import CategoryStatus, APIResponse, Messages
 
 
 class CategoriaViewSet(viewsets.ModelViewSet):
@@ -28,7 +29,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     # === GET /api/categorias/?jerarquia=true ===
     def get_queryset(self):
         jerarquia = self.request.query_params.get('jerarquia')
-        base_qs = Categoria.objects.filter(estado_categoria='ACTIVA')
+        base_qs = Categoria.objects.filter(estado_categoria=CategoryStatus.ACTIVA)
 
         if jerarquia == 'true':
             return base_qs.filter(id_catpadre__isnull=True)
@@ -41,7 +42,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         categoria = serializer.save()
 
-        ip_cliente = _get_client_ip(request)
+        ip_cliente = obtener_ip_cliente(request)
         categoria_creada.send(
             sender=self.__class__,
             categoria=categoria,
@@ -49,12 +50,9 @@ class CategoriaViewSet(viewsets.ModelViewSet):
             ip=ip_cliente
         )
 
-        return Response(
-            {
-                "message": f"Categoría '{categoria.nombre}' creada correctamente.",
-                "categoria": serializer.data
-            },
-            status=status.HTTP_201_CREATED
+        return APIResponse.created(
+            message=Messages.CATEGORY_CREATED,
+            data={"categoria": serializer.data}
         )
 
     # === PUT/PATCH /api/categorias/{id}/ ===
@@ -79,7 +77,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
                 })
 
         if cambios:
-            ip_cliente = _get_client_ip(request)
+            ip_cliente = obtener_ip_cliente(request)
             categoria_actualizada.send(
                 sender=self.__class__,
                 categoria=categoria_actualizada_obj,
@@ -88,13 +86,12 @@ class CategoriaViewSet(viewsets.ModelViewSet):
                 cambios=cambios
             )
 
-        return Response(
-            {
-                "message": f"Categoría '{categoria_actualizada_obj.nombre}' actualizada correctamente.",
+        return APIResponse.success(
+            message=Messages.CATEGORY_UPDATED,
+            data={
                 "cambios": cambios,
                 "categoria": serializer.data
-            },
-            status=status.HTTP_200_OK
+            }
         )
 
     # === DELETE /api/categorias/{id}/ ===
@@ -103,22 +100,22 @@ class CategoriaViewSet(viewsets.ModelViewSet):
 
         # No eliminar si tiene subcategorías
         if categoria.subcategorias.exists():
-            return Response(
-                {"detail": "No se puede eliminar una categoría con subcategorías."},
-                status=status.HTTP_409_CONFLICT
+            return APIResponse.error(
+                message=Messages.CATEGORY_HAS_SUBCATEGORIES,
+                status_code=status.HTTP_409_CONFLICT
             )
 
         # No eliminar si tiene productos activos
         if Producto.objects.filter(id_categoria=categoria.id_categoria).exists():
-            return Response(
-                {"detail": "No se puede eliminar una categoría con productos activos."},
-                status=status.HTTP_409_CONFLICT
+            return APIResponse.error(
+                message=Messages.CATEGORY_HAS_PRODUCTS,
+                status_code=status.HTTP_409_CONFLICT
             )
         
-        categoria.estado_categoria = 'INACTIVA'
+        categoria.estado_categoria = CategoryStatus.INACTIVA
         categoria.save()
 
-        ip_cliente = _get_client_ip(request)
+        ip_cliente = obtener_ip_cliente(request)
 
         categoria_eliminada.send(
             sender=self.__class__,
@@ -136,31 +133,25 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     def restaurar(self, request, pk=None):
         categoria = Categoria.objects.filter(id_categoria=pk).first()
         if not categoria:
-            return Response(
-                {"detail": "Categoría no encontrada."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return APIResponse.not_found(message=Messages.CATEGORY_NOT_FOUND)
 
-        if categoria.estado_categoria == 'ACTIVA':
-            return Response(
-                {"detail": "La categoría ya está activa."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        if categoria.estado_categoria == CategoryStatus.ACTIVA:
+            return APIResponse.bad_request(message=Messages.CATEGORY_ALREADY_ACTIVE)
 
-        categoria.estado_categoria = 'ACTIVA'
+        categoria.estado_categoria = CategoryStatus.ACTIVA
         categoria.save()
 
-        ip_cliente = _get_client_ip(request)
+        ip_cliente = obtener_ip_cliente(request)
         categoria_restaurada.send(
             sender=self.__class__,
             categoria=categoria,
             usuario=request.user,
             ip=ip_cliente
         )
-        return Response({
-            "message": f"Categoría '{categoria.nombre}' restaurada exitosamente.",
-            "categoria": CategoriaSerializer(categoria).data
-        })
+        return APIResponse.success(
+            message=Messages.CATEGORY_RESTORED,
+            data={"categoria": CategoriaSerializer(categoria).data}
+        )
 
     # === POST /api/categorias/{id}/mover/ ===
     @action(detail=True, methods=['post'])
@@ -171,19 +162,13 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         motivo = request.data.get('motivo', '')
 
         if nuevo_id == categoria.id_categoria:
-            return Response(
-                {"detail": "No se puede mover una categoría a sí misma."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return APIResponse.bad_request(message=Messages.CATEGORY_CANNOT_MOVE_TO_SELF)
 
         nuevo_padre = Categoria.objects.filter(id_categoria=nuevo_id).first() if nuevo_id else None
 
         # No permitir mover dentro de sus propias subcategorías
         if self._es_descendiente(nuevo_padre, categoria):
-            return Response(
-                {"detail": "No se puede mover una categoría dentro de sus subcategorías."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return APIResponse.bad_request(message=Messages.CATEGORY_CANNOT_MOVE_TO_CHILD)
 
         origen = categoria.id_catpadre.nombre if categoria.id_catpadre else "Raíz"
         destino = nuevo_padre.nombre if nuevo_padre else "Raíz"
@@ -191,7 +176,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         categoria.id_catpadre = nuevo_padre
         categoria.save()
 
-        ip_cliente = _get_client_ip(request)
+        ip_cliente = obtener_ip_cliente(request)
         categoria_movida.send(
             sender=self.__class__,
             categoria=categoria,
@@ -202,10 +187,10 @@ class CategoriaViewSet(viewsets.ModelViewSet):
             motivo=motivo
         )
 
-        return Response({
-            "message": f"Categoría '{categoria.nombre}' movida de '{origen}' a '{destino}' correctamente.",
-            "ruta_nueva": self._build_ruta(categoria)
-        })
+        return APIResponse.success(
+            message=Messages.CATEGORY_MOVED,
+            data={"ruta_nueva": self._build_ruta(categoria)}
+        )
 
     # === GET /api/categorias/{id}/ruta/ ===
     @action(detail=True, methods=['get'])
@@ -238,7 +223,7 @@ class CategoriaViewSet(viewsets.ModelViewSet):
         optimizada con prefetch y conteo de productos.
         """
         categorias = (
-            Categoria.objects.filter(estado_categoria='ACTIVA')
+            Categoria.objects.filter(estado_categoria=CategoryStatus.ACTIVA)
             .select_related('id_catpadre')
             .prefetch_related('subcategorias', 'productos')
             .annotate(cantidad_productos=Count('productos'))
@@ -287,16 +272,5 @@ class CategoriaViewSet(viewsets.ModelViewSet):
             result = cursor.fetchone()
         return result[0] or 0
     
-    def get_queryset(self):
-        jerarquia = self.request.query_params.get('jerarquia')
-        qs = (
-            Categoria.objects.filter(estado_categoria='ACTIVA')
-            .select_related('id_catpadre')
-            .prefetch_related('subcategorias')
-            .annotate(cantidad_productos=Count('productos'))
-            .order_by('nombre')
-        )
-
-        if jerarquia == 'true':
-            qs = qs.filter(id_catpadre__isnull=True)
-        return qs
+    # NOTA: El método get_queryset() está definido al inicio de la clase (línea ~28)
+    # Esta segunda definición fue eliminada para evitar duplicación

@@ -1,6 +1,5 @@
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Count
@@ -11,15 +10,20 @@ from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
+# Importar utilidades centralizadas
+from apps.autenticacion.utils.helpers import obtener_ip_cliente
+
 # Importar signals
 from apps.bitacora.signals import (
     usuario_creado, usuario_actualizado, usuario_eliminado,
     usuario_estado_cambiado, usuario_password_cambiado, logout_forzado,
-    token_invalidado
+    token_invalidado,
+    direccion_creada, direccion_actualizada, direccion_eliminada,
+    direccion_principal_cambiada
 )
 import logging
 
-from ..models import Usuario, Vendedor, Administrador, Cliente
+from ..models import Usuario, Vendedor, Administrador, Cliente, DireccionCliente
 from ..serializers.gestion_usuarios import (
     UsuarioAdminListSerializer,
     UsuarioAdminDetailSerializer,
@@ -29,6 +33,10 @@ from ..serializers.gestion_usuarios import (
     CambiarEstadoSerializer,
     ForzarLogoutSerializer,
 )
+from ..serializers.direccion_cliente import DireccionClienteSerializer
+
+# Importar constantes
+from core.constants import UserStatus, APIResponse, Messages
 
 logger = logging.getLogger(__name__)
 
@@ -70,15 +78,6 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
     # =======================
     # MÉTODOS UTILITARIOS
     # =======================
-
-    def _obtener_ip_request(self, request):
-        """Obtiene la IP real del cliente"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
 
     def _invalidar_tokens_usuario(self, usuario):
         """Invalida TODOS los tokens JWT del usuario"""
@@ -127,7 +126,7 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             usuario_creado=usuario,
             usuario_ejecutor=request.user,
-            ip=self._obtener_ip_request(request),
+            ip=obtener_ip_cliente(request),
             datos_adicionales={
                 'rol': usuario.id_rol.nombre if usuario.id_rol else 'Sin rol'
             }
@@ -144,7 +143,7 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
                 "fecha_registro": usuario.fecha_registro,
                 "estado_usuario": usuario.estado_usuario,
                 "rol": usuario.id_rol.nombre if usuario.id_rol else None,
-                "message": "Usuario creado exitosamente"
+                "message": Messages.USER_CREATED
             },
             status=status.HTTP_201_CREATED
         )
@@ -179,7 +178,7 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             usuario_afectado=usuario,
             usuario_ejecutor=request.user,
-            ip=self._obtener_ip_request(request),
+            ip=obtener_ip_cliente(request),
             datos_anteriores=datos_anteriores,
             datos_nuevos=datos_nuevos
         )
@@ -192,34 +191,32 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         
         # Validaciones de seguridad
         if usuario.id_usuario == 1:
-            return Response(
-                {"detail": "No se puede eliminar al administrador principal", "code": "cannot_delete_main_admin"},
-                status=status.HTTP_400_BAD_REQUEST
+            return APIResponse.bad_request(
+                message=Messages.CANNOT_DELETE_MAIN_ADMIN,
+                errors={'code': 'cannot_delete_main_admin'}
             )
         
         if usuario.id_usuario == request.user.id_usuario:
-            return Response(
-                {"detail": "No puede eliminar su propio usuario", "code": "cannot_delete_self"},
-                status=status.HTTP_400_BAD_REQUEST
+            return APIResponse.bad_request(
+                message=Messages.CANNOT_DELETE_SELF,
+                errors={'code': 'cannot_delete_self'}
             )
         
         if self._tiene_ventas_activas(usuario):
-            return Response(
-                {
-                    "detail": "No se puede eliminar usuario con ventas activas",
-                    "code": "user_has_active_sales",
-                    "related_sales": self._contar_ventas_activas(usuario)
-                },
-                status=status.HTTP_409_CONFLICT
+            return APIResponse.error(
+                message=Messages.USER_HAS_ACTIVE_SALES,
+                status_code=409,
+                code='user_has_active_sales',
+                related_sales=self._contar_ventas_activas(usuario)
             )
         
         # Invalidar tokens antes de desactivar
         tokens_invalidados = 0
-        if usuario.estado_usuario == 'ACTIVO':
+        if usuario.estado_usuario == UserStatus.ACTIVO:
             tokens_invalidados = self._invalidar_tokens_usuario(usuario)
         
         # Eliminación lógica
-        usuario.estado_usuario = 'INACTIVO'
+        usuario.estado_usuario = UserStatus.INACTIVO
         usuario.save()
         
         # DISPARAR SIGNAL
@@ -227,7 +224,7 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             usuario_afectado=usuario,
             usuario_ejecutor=request.user,
-            ip=self._obtener_ip_request(request),
+            ip=obtener_ip_cliente(request),
             motivo='Eliminación administrativa',
             tokens_invalidados=tokens_invalidados
         )
@@ -246,7 +243,10 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         usuario_id = request.GET.get('usuario_id')
         
         if not username:
-            return Response({'error': 'Username parameter required'}, status=400)
+            return APIResponse.bad_request(
+                message=Messages.FIELD_REQUIRED.format(field='username'),
+                errors={'code': 'username_required'}
+            )
         
         # Buscar si existe el username
         queryset = Usuario.objects.filter(nombre_usuario=username)
@@ -260,7 +260,7 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         
         existe = queryset.exists()
         
-        return Response({'disponible': not existe})
+        return APIResponse.success(data={'disponible': not existe})
 
     @action(detail=False, methods=['get'], url_path='verificar_email')
     def verificar_email(self, request):
@@ -269,7 +269,10 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         usuario_id = request.GET.get('usuario_id')
         
         if not email:
-            return Response({'error': 'Email parameter required'}, status=400)
+            return APIResponse.bad_request(
+                message=Messages.FIELD_REQUIRED.format(field='email'),
+                errors={'code': 'email_required'}
+            )
         
         # Buscar si existe el email
         queryset = Usuario.objects.filter(correo=email)
@@ -283,7 +286,7 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         
         existe = queryset.exists()
         
-        return Response({'disponible': not existe})
+        return APIResponse.success(data={'disponible': not existe})
 
     # =======================
     # ACCIONES PERSONALIZADAS
@@ -302,7 +305,7 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         
         # Si cambia de ACTIVO a INACTIVO, invalidar tokens
         tokens_invalidados = 0
-        if nuevo_estado == 'INACTIVO' and usuario.estado_usuario == 'ACTIVO':
+        if nuevo_estado == UserStatus.INACTIVO and usuario.estado_usuario == UserStatus.ACTIVO:
             tokens_invalidados = self._invalidar_tokens_usuario(usuario)
         
         usuario.estado_usuario = nuevo_estado
@@ -313,17 +316,19 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             usuario_afectado=usuario,
             usuario_ejecutor=request.user,
-            ip=self._obtener_ip_request(request),
+            ip=obtener_ip_cliente(request),
             estado_anterior=estado_anterior,
             estado_nuevo=nuevo_estado,
             motivo=motivo
         )
         
-        return Response({
-            "id": usuario.id_usuario,
-            "estado_usuario": usuario.estado_usuario,
-            "message": "Estado actualizado correctamente"
-        })
+        return APIResponse.success(
+            data={
+                "id": usuario.id_usuario,
+                "estado_usuario": usuario.estado_usuario
+            },
+            message=Messages.USER_STATUS_CHANGED
+        )
 
     @action(detail=True, methods=['post'])
     def cambiar_contrasena(self, request, pk=None):
@@ -341,12 +346,10 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             usuario_afectado=usuario,
             usuario_ejecutor=request.user,
-            ip=self._obtener_ip_request(request)
+            ip=obtener_ip_cliente(request)
         )
         
-        return Response({
-            "message": "Contraseña actualizada exitosamente"
-        })
+        return APIResponse.success(message=Messages.PASSWORD_CHANGED)
 
     @action(detail=True, methods=['post'])
     def forzar_logout(self, request, pk=None):
@@ -357,11 +360,11 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         
         motivo = serializer.validated_data.get('motivo', 'Sin motivo especificado')
         
-        if usuario.estado_usuario != 'ACTIVO':
-            return Response({
-                "detail": "No se puede forzar logout de usuario inactivo",
-                "code": "user_inactive"
-            }, status=status.HTTP_400_BAD_REQUEST)
+        if usuario.estado_usuario != UserStatus.ACTIVO:
+            return APIResponse.bad_request(
+                message=Messages.CANNOT_LOGOUT_INACTIVE_USER,
+                errors={'code': 'user_inactive'}
+            )
         
         tokens_invalidados = self._invalidar_tokens_usuario(usuario)
         
@@ -370,16 +373,18 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
             sender=self.__class__,
             usuario_afectado=usuario,
             usuario_ejecutor=request.user,
-            ip=self._obtener_ip_request(request),
+            ip=obtener_ip_cliente(request),
             motivo=motivo,
             tokens_invalidados=tokens_invalidados
         )
         
-        return Response({
-            "message": f"Logout forzado exitosamente",
-            "tokens_invalidados": tokens_invalidados,
-            "usuario": usuario.nombre_usuario
-        })
+        return APIResponse.success(
+            data={
+                "tokens_invalidados": tokens_invalidados,
+                "usuario": usuario.nombre_usuario
+            },
+            message=Messages.LOGOUT_FORCED
+        )
 
     # =======================
     # MÉTODOS DE VALIDACIÓN
@@ -449,10 +454,322 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
             last_login__date=hoy
         ).count()
         
-        return Response({
+        return APIResponse.success(data={
             "total_usuarios": total_usuarios,
             "por_rol": por_rol_dict,
             "por_estado": por_estado_dict,
             "nuevos_ultimos_30_dias": nuevos_ultimos_30_dias,
             "usuarios_activos_hoy": usuarios_activos_hoy
         })
+    
+    #-----------------------------
+    # GESTIÓN DE DIRECCIONES DE CLIENTES (ADMIN)
+    #-----------------------------
+    
+    @action(detail=True, methods=['get', 'post'], url_path='direcciones')
+    def gestionar_direcciones(self, request, pk=None):
+        """
+        GET /api/usuarios/admin/usuarios/{id}/direcciones/
+        POST /api/usuarios/admin/usuarios/{id}/direcciones/
+        
+        Obtiene todas las direcciones de un cliente (GET) o crea una nueva (POST).
+        Solo administradores pueden acceder.
+        """
+        usuario = self.get_object()
+        
+        # Verificar que sea un cliente
+        if not usuario.id_rol or usuario.id_rol.nombre != 'CLIENTE':
+            return APIResponse.bad_request(
+                message=Messages.ONLY_CLIENTS_HAVE_ADDRESSES
+            )
+        
+        # Obtener el cliente
+        try:
+            cliente = Cliente.objects.get(id_cliente=usuario)
+        except Cliente.DoesNotExist:
+            return APIResponse.not_found(
+                message=Messages.CLIENT_NOT_FOUND
+            )
+        
+        # ==================== GET: Listar direcciones ====================
+        if request.method == 'GET':
+            try:
+                # Obtener todas las direcciones (incluso las no guardadas para el admin)
+                mostrar_todas = request.query_params.get('todas', 'false').lower() == 'true'
+                
+                if mostrar_todas:
+                    direcciones = DireccionCliente.objects.filter(id_cliente=cliente)
+                else:
+                    direcciones = DireccionCliente.objects.filter(id_cliente=cliente, guardada=True)
+                
+                direcciones = direcciones.order_by('-es_principal', '-fecha_creacion')
+                
+                serializer = DireccionClienteSerializer(direcciones, many=True)
+                
+                logger.info(
+                    f"Admin {request.user.nombre_usuario} consultó direcciones "
+                    f"del cliente {usuario.nombre_usuario}"
+                )
+                
+                return APIResponse.success(
+                    message=Messages.ADDRESSES_RETRIEVED,
+                    data={
+                        'total': direcciones.count(),
+                        'cliente': {
+                            'id_usuario': usuario.id_usuario,
+                            'nombre_completo': usuario.nombre_completo,
+                            'correo': usuario.correo
+                        },
+                        'direcciones': serializer.data
+                    }
+                )
+                
+            except Exception as e:
+                logger.error(f"Error al obtener direcciones: {str(e)}")
+                return APIResponse.server_error(
+                    message=Messages.ERROR_FETCHING_ADDRESSES,
+                    detail=str(e)
+                )
+        
+        # ==================== POST: Crear dirección ====================
+        elif request.method == 'POST':
+            try:
+                # Validar y crear la dirección
+                serializer = DireccionClienteSerializer(data=request.data)
+                
+                if serializer.is_valid():
+                    # Guardar con el cliente especificado
+                    direccion = serializer.save(id_cliente=cliente)
+                    
+                    # Si es la primera dirección, marcarla como principal automáticamente
+                    if not DireccionCliente.objects.filter(
+                        id_cliente=cliente, es_principal=True
+                    ).exclude(id_direccion=direccion.id_direccion).exists():
+                        direccion.es_principal = True
+                        direccion.save()
+                    
+                    # DISPARAR SIGNAL para auditoría
+                    direccion_creada.send(
+                        sender=self.__class__,
+                        direccion=direccion,
+                        usuario=request.user,
+                        ip=obtener_ip_cliente(request),
+                        es_admin=True
+                    )
+                    
+                    logger.info(
+                        f"Admin {request.user.nombre_usuario} creó dirección "
+                        f"para cliente {usuario.nombre_usuario}"
+                    )
+                    
+                    return APIResponse.created(
+                        message=Messages.ADDRESS_CREATED,
+                        data={'direccion': DireccionClienteSerializer(direccion).data}
+                    )
+                
+                return APIResponse.bad_request(
+                    message=Messages.INVALID_DATA,
+                    errors=serializer.errors
+                )
+                
+            except Exception as e:
+                logger.error(f"Error al crear dirección: {str(e)}")
+                return APIResponse.server_error(
+                    message=Messages.ERROR_CREATING_ADDRESS,
+                    detail=str(e)
+                )
+
+    @action(detail=True, methods=['patch', 'delete'], url_path='direcciones/(?P<dir_id>[^/.]+)')
+    def gestionar_direccion_individual(self, request, pk=None, dir_id=None):
+        """
+        PATCH /api/usuarios/admin/usuarios/{id}/direcciones/{dir_id}/
+        DELETE /api/usuarios/admin/usuarios/{id}/direcciones/{dir_id}/
+        
+        Edita o elimina una dirección específica de un cliente.
+        Solo administradores pueden acceder.
+        """
+        usuario = self.get_object()
+        
+        # Verificar que sea un cliente
+        if not usuario.id_rol or usuario.id_rol.nombre != 'CLIENTE':
+            return APIResponse.bad_request(
+                message=Messages.NOT_A_CLIENT
+            )
+        
+        # Obtener el cliente
+        try:
+            cliente = Cliente.objects.get(id_cliente=usuario)
+        except Cliente.DoesNotExist:
+            return APIResponse.not_found(
+                message=Messages.CLIENT_NOT_FOUND
+            )
+        
+        # Obtener la dirección y verificar que pertenezca al cliente
+        try:
+            direccion = DireccionCliente.objects.get(
+                id_direccion=dir_id,
+                id_cliente=cliente
+            )
+        except DireccionCliente.DoesNotExist:
+            return APIResponse.not_found(
+                message=Messages.ADDRESS_NOT_BELONGS
+            )
+        
+        # ==================== PATCH: Editar dirección ====================
+        if request.method == 'PATCH':
+            try:
+                # Actualizar la dirección
+                serializer = DireccionClienteSerializer(
+                    direccion, 
+                    data=request.data, 
+                    partial=True
+                )
+                
+                if serializer.is_valid():
+                    # Guardar datos de cambios para auditoría
+                    cambios = list(request.data.keys())
+                    
+                    direccion_actualizada = serializer.save()
+                    
+                    # DISPARAR SIGNAL para auditoría
+                    direccion_actualizada.send(
+                        sender=self.__class__,
+                        direccion=direccion_actualizada,
+                        usuario=request.user,
+                        ip=obtener_ip_cliente(request),
+                        cambios=cambios,
+                        es_admin=True
+                    )
+                    
+                    logger.info(
+                        f"Admin {request.user.nombre_usuario} editó dirección {dir_id} "
+                        f"del cliente {usuario.nombre_usuario}"
+                    )
+                    
+                    return APIResponse.success(
+                        message=Messages.ADDRESS_UPDATED,
+                        data={'direccion': DireccionClienteSerializer(direccion_actualizada).data}
+                    )
+                
+                return APIResponse.bad_request(
+                    message=Messages.INVALID_DATA,
+                    errors=serializer.errors
+                )
+                
+            except Exception as e:
+                logger.error(f"Error al editar dirección: {str(e)}")
+                return APIResponse.server_error(
+                    message=Messages.ERROR_UPDATING_ADDRESS,
+                    detail=str(e)
+                )
+        
+        # ==================== DELETE: Eliminar dirección ====================
+        elif request.method == 'DELETE':
+            try:
+                # Soft delete: marcar como no guardada
+                direccion.guardada = False
+                direccion.save()
+                
+                # DISPARAR SIGNAL para auditoría
+                direccion_eliminada.send(
+                    sender=self.__class__,
+                    direccion=direccion,
+                    usuario=request.user,
+                    ip=obtener_ip_cliente(request),
+                    es_admin=True
+                )
+                
+                logger.info(
+                    f"Admin {request.user.nombre_usuario} eliminó dirección {dir_id} "
+                    f"del cliente {usuario.nombre_usuario}"
+                )
+                
+                return APIResponse.success(
+                    message=Messages.ADDRESS_DELETED
+                )
+                
+            except Exception as e:
+                logger.error(f"Error al eliminar dirección: {str(e)}")
+                return APIResponse.server_error(
+                    message=Messages.ERROR_DELETING_ADDRESS,
+                    detail=str(e)
+                )
+    
+    @action(
+        detail=True, 
+        methods=['post'], 
+        url_path='direcciones/(?P<dir_id>[^/.]+)/marcar-principal'
+    )
+    def marcar_direccion_principal(self, request, pk=None, dir_id=None):
+        """
+        POST /api/usuarios/admin/usuarios/{id}/direcciones/{dir_id}/marcar-principal/
+        
+        Marca una dirección como principal y desmarca las demás.
+        Solo administradores pueden acceder.
+        """
+        try:
+            usuario = self.get_object()
+            
+            # Verificar que sea un cliente
+            if not usuario.id_rol or usuario.id_rol.nombre != 'CLIENTE':
+                return APIResponse.bad_request(
+                    message=Messages.NOT_A_CLIENT
+                )
+            
+            # Obtener el cliente
+            try:
+                cliente = Cliente.objects.get(id_cliente=usuario)
+            except Cliente.DoesNotExist:
+                return APIResponse.not_found(
+                    message=Messages.CLIENT_NOT_FOUND
+                )
+            
+            # Obtener la dirección
+            try:
+                direccion = DireccionCliente.objects.get(
+                    id_direccion=dir_id,
+                    id_cliente=cliente
+                )
+            except DireccionCliente.DoesNotExist:
+                return APIResponse.not_found(
+                    message=Messages.ADDRESS_NOT_BELONGS
+                )
+            
+            # Transaction atómica
+            from django.db import transaction
+            with transaction.atomic():
+                # Desmarcar todas las direcciones del cliente
+                DireccionCliente.objects.filter(
+                    id_cliente=cliente,
+                    es_principal=True
+                ).update(es_principal=False)
+                
+                # Marcar esta como principal
+                direccion.es_principal = True
+                direccion.save()
+            
+            # DISPARAR SIGNAL para auditoría
+            direccion_principal_cambiada.send(
+                sender=self.__class__,
+                direccion=direccion,
+                usuario=request.user,
+                ip=obtener_ip_cliente(request),
+                es_admin=True
+            )
+            
+            logger.info(
+                f"Admin {request.user.nombre_usuario} marcó dirección {dir_id} como principal "
+                f"para cliente {usuario.nombre_usuario}"
+            )
+            
+            return APIResponse.success(
+                message=Messages.ADDRESS_MARKED_PRINCIPAL,
+                data={'direccion': DireccionClienteSerializer(direccion).data}
+            )
+            
+        except Exception as e:
+            logger.error(f"Error al marcar dirección como principal: {str(e)}")
+            return APIResponse.server_error(
+                message=Messages.ERROR_MARKING_PRINCIPAL,
+                detail=str(e)
+            )
