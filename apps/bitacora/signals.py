@@ -81,6 +81,12 @@ permiso_removido_de_rol = Signal()    # args: rol, permiso, usuario, ip
 permiso_concedido_a_usuario = Signal()  # args: usuario_afectado, permiso, usuario_ejecutor, ip, motivo
 permiso_revocado_a_usuario = Signal()   # args: usuario_afectado, permiso, usuario_ejecutor, ip, motivo
 
+# --- GESTIÓN DE SOPORTE/TICKETS ---
+ticket_creado = Signal()           # args: ticket, usuario, ip
+ticket_respondido = Signal()       # args: ticket, mensaje, usuario, ip, es_agente
+ticket_cerrado = Signal()          # args: ticket, usuario, ip
+ticket_reabierto = Signal()        # args: ticket, usuario, ip
+
 
 # =====================================================
 # RECEIVERS: AUTENTICACIÓN Y SESIONES
@@ -628,7 +634,7 @@ def registrar_direccion_creada(sender, direccion, usuario, ip, es_admin=False, *
     
     descripcion = (
         f"[{tipo_accion}] Dirección creada {accion_por} para el cliente '{cliente_usuario}' | "
-        f"Departamento: {direccion.departamento}, Municipio: {direccion.municipio}, "
+        f"Ubicación: {direccion.ciudad or 'Sin ciudad'}, {direccion.departamento or 'Sin departamento'}, "
         f"Principal: {'Sí' if direccion.es_principal else 'No'}"
     )
     
@@ -684,7 +690,7 @@ def registrar_direccion_eliminada(sender, direccion, usuario, ip, es_admin=False
     
     descripcion = (
         f"[{tipo_accion}] Dirección del cliente '{cliente_usuario}' eliminada {accion_por} | "
-        f"Ubicación: {direccion.departamento}, {direccion.municipio}"
+        f"Ubicación: {direccion.ciudad or 'Sin ciudad'}, {direccion.departamento or 'Sin departamento'}"
     )
     
     AuditoriaLogger.registrar_evento(
@@ -710,7 +716,7 @@ def registrar_direccion_principal_cambiada(sender, direccion, usuario, ip, es_ad
     
     descripcion = (
         f"[{tipo_accion}] Dirección principal del cliente '{cliente_usuario}' cambiada {accion_por} | "
-        f"Nueva dirección principal: {direccion.departamento}, {direccion.municipio}"
+        f"Nueva dirección principal: {direccion.ciudad or 'Sin ciudad'}, {direccion.departamento or 'Sin departamento'}"
     )
     
     AuditoriaLogger.registrar_evento(
@@ -891,3 +897,81 @@ def registrar_permiso_revocado_a_usuario(sender, usuario_permiso, revocado_por, 
         usuario=revocado_por
     )
 
+
+# =====================================================
+# RECEIVERS: GESTIÓN DE SOPORTE/TICKETS (CU25)
+# =====================================================
+
+@receiver(ticket_creado)
+def registrar_ticket_creado(sender, ticket, usuario, ip, **kwargs):
+    """Registra la creación de un nuevo ticket de soporte"""
+    descripcion = (
+        f"Ticket de soporte #{ticket.id_ticket} creado por {usuario.nombre_completo} | "
+        f"Asunto: '{ticket.asunto}' | "
+        f"Tipo: {ticket.get_tipo_consulta_display()} | "
+        f"Estado: {ticket.get_estado_display()}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="TICKET_CREATED",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(ticket_respondido)
+def registrar_ticket_respondido(sender, ticket, mensaje, usuario, ip, es_agente=False, **kwargs):
+    """Registra una respuesta en un ticket de soporte"""
+    tipo_respuesta = "AGENTE" if es_agente else "CLIENTE"
+    rol_usuario = usuario.id_rol.nombre if usuario.id_rol else "Sin rol"
+    
+    descripcion = (
+        f"[{tipo_respuesta}] Respuesta en ticket #{ticket.id_ticket} por {usuario.nombre_completo} ({rol_usuario}) | "
+        f"Asunto: '{ticket.asunto}' | "
+        f"Nuevo estado: {ticket.get_estado_display()}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="TICKET_RESPONDED",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(ticket_cerrado)
+def registrar_ticket_cerrado(sender, ticket, usuario, ip, **kwargs):
+    """Registra el cierre de un ticket de soporte"""
+    cantidad_mensajes = ticket.mensajes.count()
+    
+    descripcion = (
+        f"Ticket #{ticket.id_ticket} cerrado por {usuario.nombre_completo} | "
+        f"Asunto: '{ticket.asunto}' | "
+        f"Cliente: {ticket.id_cliente.nombre_completo} | "
+        f"Mensajes totales: {cantidad_mensajes}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="TICKET_CLOSED",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(ticket_reabierto)
+def registrar_ticket_reabierto(sender, ticket, usuario, ip, **kwargs):
+    """Registra la reapertura de un ticket de soporte"""
+    descripcion = (
+        f"Ticket #{ticket.id_ticket} reabierto por {usuario.nombre_completo} | "
+        f"Asunto: '{ticket.asunto}' | "
+        f"Nuevo estado: {ticket.get_estado_display()}"
+    )
+    
+    AuditoriaLogger.registrar_evento(
+        accion="TICKET_REOPENED",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )

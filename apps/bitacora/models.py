@@ -9,7 +9,6 @@ class Bitacora(models.Model):
     """
     ACCIONES = BitacoraActions.choices()
 
-
     id_bitacora = models.AutoField(primary_key=True)
     fecha_hora = models.DateTimeField(auto_now_add=True, db_column="fecha_hora")
     accion = models.CharField(max_length=255, choices=ACCIONES)

@@ -45,7 +45,7 @@ class APIResponse:
         }
         
         if data is not None:
-            response_data.update(data)
+            response_data["data"] = data 
         
         # Mapear códigos comunes
         status_map = {

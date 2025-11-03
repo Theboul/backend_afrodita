@@ -91,6 +91,14 @@ class BitacoraActions:
     PERMISSION_REVOKED_FROM_USER = 'PERMISSION_REVOKED_FROM_USER'
     
     # =====================================================
+    # GESTIÓN DE SOPORTE/TICKETS (CU25)
+    # =====================================================
+    TICKET_CREATED = 'TICKET_CREATED'
+    TICKET_RESPONDED = 'TICKET_RESPONDED'
+    TICKET_CLOSED = 'TICKET_CLOSED'
+    TICKET_REOPENED = 'TICKET_REOPENED'
+    
+    # =====================================================
     # ERRORES Y SEGURIDAD
     # =====================================================
     ERROR_404 = 'ERROR_404'
@@ -170,6 +178,12 @@ class BitacoraActions:
             (cls.PERMISSION_REMOVED_FROM_ROLE, 'Remoción de permiso de rol'),
             (cls.PERMISSION_GRANTED_TO_USER, 'Concesión de permiso individual a usuario'),
             (cls.PERMISSION_REVOKED_FROM_USER, 'Revocación de permiso individual de usuario'),
+            
+            # Soporte/Tickets
+            (cls.TICKET_CREATED, 'Creación de ticket de soporte'),
+            (cls.TICKET_RESPONDED, 'Respuesta en ticket de soporte'),
+            (cls.TICKET_CLOSED, 'Cierre de ticket de soporte'),
+            (cls.TICKET_REOPENED, 'Reapertura de ticket de soporte'),
             
             # Errores
             (cls.ERROR_404, 'Página no encontrada'),

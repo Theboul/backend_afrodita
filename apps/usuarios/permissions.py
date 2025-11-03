@@ -46,3 +46,20 @@ class EsCliente(permissions.BasePermission):
             request.user.id_rol and 
             request.user.id_rol.nombre == 'CLIENTE'
         )
+
+
+class EsClienteOAdmin(permissions.BasePermission):
+    """
+    Permiso: Permite acceso a clientes (solo sus recursos) y administradores/vendedores (todos los recursos)
+    """
+    message = "No tienes permisos para acceder a este recurso."
+    
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        if not request.user.id_rol:
+            return False
+        
+        # Permitir si es CLIENTE, ADMINISTRADOR o VENDEDOR
+        return request.user.id_rol.nombre in ['CLIENTE', 'ADMINISTRADOR', 'VENDEDOR']
