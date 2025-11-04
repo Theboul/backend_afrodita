@@ -19,6 +19,7 @@ def api_root(request, format=None):
         "productos": request.build_absolute_uri("/api/productos/"),
         "ventas": request.build_absolute_uri("/api/ventas/"),
         "compras": request.build_absolute_uri("/api/compras/"),
+         "carrito": request.build_absolute_uri("/api/carrito/"),       
         "bitacora": request.build_absolute_uri("/api/bitacora/"),
         "imagenes": request.build_absolute_uri("/api/imagenes/"),
         "documentacion": {
@@ -45,7 +46,7 @@ urlpatterns = [
     path("api/bitacora/", include("apps.bitacora.urls")),
     path("api/imagenes/", include("apps.imagenes.urls")),
     path('api/catalogo/', include('apps.catalogo.urls')),
-    path('api/', include('apps.carrito.urls')),
+    path('api/carrito/', include('apps.carrito.urls')),
 
 
     # Documentación automática

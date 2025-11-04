@@ -1,8 +1,14 @@
-# carrito/urls.py
-from rest_framework.routers import DefaultRouter
-from .views import CarritoViewSet
+from django.urls import path
+from .views import (
+    carrito_ver,
+    carrito_agregar,
+    carrito_actualizar,
+    carrito_vaciar
+)
 
-router = DefaultRouter()
-router.register(r'carrito', CarritoViewSet, basename='carrito')
-
-urlpatterns = router.urls
+urlpatterns = [
+    path('', carrito_ver, name='carrito_ver'),
+    path('agregar/', carrito_agregar, name='carrito_agregar'),
+    path('actualizar/', carrito_actualizar, name='carrito_actualizar'),
+    path('vaciar/', carrito_vaciar, name='carrito_vaciar'),
+]
