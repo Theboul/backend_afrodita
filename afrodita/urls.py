@@ -21,6 +21,8 @@ def api_root(request, format=None):
         "compras": request.build_absolute_uri("/api/compras/"),
         "bitacora": request.build_absolute_uri("/api/bitacora/"),
         "imagenes": request.build_absolute_uri("/api/imagenes/"),
+        "inventario": request.build_absolute_uri("/api/inventario/"),
+        "lotes": request.build_absolute_uri("/api/lotes/"),
         "documentacion": {
             "swagger": request.build_absolute_uri("/api/docs/"),
             "redoc": request.build_absolute_uri("/api/redoc/"),
@@ -45,6 +47,8 @@ urlpatterns = [
     path("api/bitacora/", include("apps.bitacora.urls")),
     path("api/imagenes/", include("apps.imagenes.urls")),
     path('api/catalogo/', include('apps.catalogo.urls')),
+    path("api/inventario/", include("apps.inventario.urls")),  # 🆕 Módulo de Inventario
+    path("api/lotes/", include("apps.lotes.urls")),  # 🆕 Módulo de Lotes
 
     # Documentación automática
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
