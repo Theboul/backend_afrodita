@@ -55,6 +55,7 @@ urlpatterns = [
     path("api/lotes/", include("apps.lotes.urls")),
     path('api/carrito/', include('apps.carrito.urls')),
     path('api/pagos/', include('apps.pagos.urls')),
+    path('api/proveedores/', include('apps.proveedores.urls')),
 
     # Documentación automática
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
