@@ -12,4 +12,5 @@ urlpatterns = [
     # Stripe endpoints
     path("stripe/create-intent/", views.StripeCreateIntentView.as_view(), name="ventas-stripe-create-intent"),
     path("stripe/webhook/", views.StripeWebhookView.as_view(), name="ventas-stripe-webhook"),
+    path("create-payment-intent/", views.create_payment_intent, name="ventas-create-payment-intent"),
 ]
