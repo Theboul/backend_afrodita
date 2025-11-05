@@ -67,6 +67,21 @@ class BitacoraActions:
     IMAGE_REORDER = 'IMAGE_REORDER'
     IMAGE_RESTORE = 'IMAGE_RESTORE'
     IMAGE_UPDATE = 'IMAGE_UPDATE'
+
+    # =====================================================
+    # GESTIÓN DE PROVEEDORES (CU7)
+    # =====================================================
+    PROVIDER_CREATE = 'PROVIDER_CREATE'
+    PROVIDER_UPDATE = 'PROVIDER_UPDATE'
+    PROVIDER_BLOCK = 'PROVIDER_BLOCK'
+    PROVIDER_ACTIVATE = 'PROVIDER_ACTIVATE'
+
+    # =====================================================
+    # GESTIÓN DE COMPRAS (CU13)
+    # =====================================================
+    PURCHASE_ORDER_CREATE = 'PURCHASE_ORDER_CREATE'
+    PURCHASE_RECEIPT = 'PURCHASE_RECEIPT'
+    PURCHASE_ORDER_STATE_CHANGE = 'PURCHASE_ORDER_STATE_CHANGE'
     
     # =====================================================
     # GESTIÓN DE DIRECCIONES DE CLIENTES
@@ -152,7 +167,18 @@ class BitacoraActions:
             (cls.IMAGE_REORDER, 'Reordenamiento de imágenes'),
             (cls.IMAGE_RESTORE, 'Restauración de imagen de producto'),
             (cls.IMAGE_UPDATE, 'Actualización de metadatos de imagen'),
-            
+
+            # Proveedores
+            (cls.PROVIDER_CREATE, 'Creación de proveedor'),
+            (cls.PROVIDER_UPDATE, 'Actualización de proveedor'),
+            (cls.PROVIDER_BLOCK, 'Bloqueo de proveedor'),
+            (cls.PROVIDER_ACTIVATE, 'Activación de proveedor'),
+
+            # Compras
+            (cls.PURCHASE_ORDER_CREATE, 'Creación de orden de compra'),
+            (cls.PURCHASE_RECEIPT, 'Registro de recepción de compra'),
+            (cls.PURCHASE_ORDER_STATE_CHANGE, 'Cambio de estado de orden de compra'),
+
             # Direcciones
             (cls.ADDRESS_CREATE, 'Creación de dirección de cliente'),
             (cls.ADDRESS_UPDATE, 'Actualización de dirección de cliente'),
