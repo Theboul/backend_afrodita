@@ -14,7 +14,7 @@ def api_root(request, format=None):
     return Response({
         "auth": request.build_absolute_uri("/api/auth/"),
         "usuarios": request.build_absolute_uri("/api/usuarios/"),
-        "seguridad": request.build_absolute_uri("/api/seguridad/"),  # 🆕 Nuevo módulo
+        "seguridad": request.build_absolute_uri("/api/seguridad/"),
         "categorias": request.build_absolute_uri("/api/categorias/"),
         "productos": request.build_absolute_uri("/api/productos/"),
         "ventas": request.build_absolute_uri("/api/ventas/"),
@@ -23,6 +23,7 @@ def api_root(request, format=None):
         "imagenes": request.build_absolute_uri("/api/imagenes/"),
         "inventario": request.build_absolute_uri("/api/inventario/"),
         "lotes": request.build_absolute_uri("/api/lotes/"),
+        "soporte": request.build_absolute_uri("/api/soporte/"),
         "documentacion": {
             "swagger": request.build_absolute_uri("/api/docs/"),
             "redoc": request.build_absolute_uri("/api/redoc/"),
@@ -39,7 +40,7 @@ urlpatterns = [
     # Módulos
     path("api/auth/", include("apps.autenticacion.urls")),
     path("api/usuarios/", include("apps.usuarios.urls")),
-    path("api/seguridad/", include("apps.seguridad.urls")),  # 🆕 Gestión de Roles y Permisos
+    path("api/seguridad/", include("apps.seguridad.urls")),  # Gestión de Roles y Permisos
     path("api/categorias/", include("apps.categoria.urls")),
     path("api/productos/", include("apps.productos.urls")),
     path("api/ventas/", include("apps.ventas.urls")),
@@ -49,6 +50,7 @@ urlpatterns = [
     path('api/catalogo/', include('apps.catalogo.urls')),
     path("api/inventario/", include("apps.inventario.urls")),  # 🆕 Módulo de Inventario
     path("api/lotes/", include("apps.lotes.urls")),  # 🆕 Módulo de Lotes
+    path('api/soporte/', include('apps.soporte.urls')),  # Gestión de Tickets de Soporte
 
     # Documentación automática
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

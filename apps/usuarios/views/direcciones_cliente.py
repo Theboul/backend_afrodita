@@ -8,7 +8,7 @@ from ..serializers.direccion_cliente import (
     DireccionClienteSerializer,
     DireccionClienteListSerializer,
 )
-from ..permissions import EsCliente
+from ..permissions import EsClienteOAdmin
 from core.constants import APIResponse, Messages
 from apps.autenticacion.utils.helpers import obtener_ip_cliente
 
@@ -27,26 +27,43 @@ logger = logging.getLogger(__name__)
 # =====================================================
 class DireccionClienteViewSet(viewsets.ModelViewSet):
     """
-    ViewSet para gestionar las direcciones del cliente autenticado.
+    ViewSet para gestionar las direcciones de clientes.
+    
+    - CLIENTES: Solo ven/gestionan sus propias direcciones
+    - ADMIN/VENDEDOR: Pueden ver/gestionar direcciones de todos los clientes
     
     Endpoints:
-    - GET /api/usuarios/perfil/direcciones/ - Listar mis direcciones
+    - GET /api/usuarios/perfil/direcciones/ - Listar direcciones
     - POST /api/usuarios/perfil/direcciones/ - Crear nueva dirección
     - GET /api/usuarios/perfil/direcciones/{id}/ - Ver una dirección
     - PATCH /api/usuarios/perfil/direcciones/{id}/ - Editar dirección
     - DELETE /api/usuarios/perfil/direcciones/{id}/ - Eliminar dirección
     - POST /api/usuarios/perfil/direcciones/{id}/marcar-principal/ - Marcar como principal
     """
-    permission_classes = [permissions.IsAuthenticated, EsCliente]
+    permission_classes = [permissions.IsAuthenticated, EsClienteOAdmin]
     
     def get_queryset(self):
         """
-        Filtrar solo las direcciones del cliente autenticado.
-        Automáticamente previene acceso a direcciones de otros clientes.
+        Filtrar direcciones según el rol del usuario:
+        - CLIENTE: Solo sus propias direcciones
+        - ADMIN/VENDEDOR: Todas las direcciones
         """
+        user = self.request.user
+        
+        # Si es admin o vendedor, puede ver todas las direcciones
+        if user.id_rol and user.id_rol.nombre in ['ADMINISTRADOR', 'VENDEDOR']:
+            return DireccionCliente.objects.select_related(
+                'id_cliente',
+                'id_cliente__id_cliente'
+            ).all()
+        
+        # Si es cliente, solo ve sus direcciones
         try:
-            cliente = Cliente.objects.get(id_cliente=self.request.user)
-            return DireccionCliente.objects.filter(id_cliente=cliente)
+            cliente = Cliente.objects.get(id_cliente=user)
+            return DireccionCliente.objects.select_related(
+                'id_cliente',
+                'id_cliente__id_cliente'
+            ).filter(id_cliente=cliente)
         except Cliente.DoesNotExist:
             return DireccionCliente.objects.none()
     
@@ -83,14 +100,37 @@ class DireccionClienteViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """
         POST /api/usuarios/perfil/direcciones/
-        Crea una nueva dirección para el cliente autenticado.
+        Crea una nueva dirección.
+        
+        - CLIENTE: Crea dirección para sí mismo
+        - ADMIN/VENDEDOR: Puede especificar id_cliente en el body
         """
         try:
-            cliente = Cliente.objects.get(id_cliente=request.user)
+            user = request.user
+            es_admin = user.id_rol and user.id_rol.nombre in ['ADMINISTRADOR', 'VENDEDOR']
+            
+            # Determinar para qué cliente se crea la dirección
+            if es_admin and 'id_cliente' in request.data:
+                # Admin puede especificar el cliente
+                try:
+                    cliente = Cliente.objects.get(id_cliente=request.data['id_cliente'])
+                except Cliente.DoesNotExist:
+                    return APIResponse.not_found(
+                        message='Cliente no encontrado.'
+                    )
+            else:
+                # Cliente crea para sí mismo
+                try:
+                    cliente = Cliente.objects.get(id_cliente=user)
+                except Cliente.DoesNotExist:
+                    return APIResponse.not_found(
+                        message='No se encontró un perfil de cliente asociado a este usuario.'
+                    )
+            
             serializer = self.get_serializer(data=request.data)
             
             if serializer.is_valid():
-                # Guardar con el cliente autenticado
+                # Guardar con el cliente correspondiente
                 direccion = serializer.save(id_cliente=cliente)
                 
                 # Si es la primera dirección, marcarla como principal
@@ -106,11 +146,12 @@ class DireccionClienteViewSet(viewsets.ModelViewSet):
                     direccion=direccion,
                     usuario=request.user,
                     ip=obtener_ip_cliente(request),
-                    es_admin=False
+                    es_admin=es_admin
                 )
                 
                 logger.info(
-                    f"Dirección creada para cliente {cliente.id_cliente.nombre_usuario}"
+                    f"Dirección creada para cliente {cliente.id_cliente.nombre_usuario} "
+                    f"por {'administrador' if es_admin else 'cliente'} {user.nombre_usuario}"
                 )
                 
                 return APIResponse.created(

@@ -8,6 +8,7 @@ from .mensajes import Messages
 from .acciones import BitacoraActions
 from .seguridad import SecurityConstants
 from .catalogo import CatalogConfig, ProductConfig
+from .soporte import TicketStatus, TicketType
 
 __all__ = [
     'UserStatus',
@@ -20,4 +21,6 @@ __all__ = [
     'SecurityConstants',
     'CatalogConfig',
     'ProductConfig',
+    'TicketStatus',
+    'TicketType',
 ]

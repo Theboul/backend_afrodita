@@ -36,10 +36,26 @@ class DireccionClienteSerializer(serializers.ModelSerializer):
 # =====================================================
 class DireccionClienteListSerializer(serializers.ModelSerializer):
     """Versión simplificada para listar direcciones"""
+    cliente_nombre = serializers.SerializerMethodField()
+    cliente_id = serializers.SerializerMethodField()
     
     class Meta:
         model = DireccionCliente
         fields = [
             'id_direccion', 'etiqueta', 'direccion', 'ciudad',
-            'es_principal', 'guardada'
+            'es_principal', 'guardada', 'cliente_id', 'cliente_nombre'
         ]
+    
+    def get_cliente_nombre(self, obj):
+        """Obtener nombre del cliente de forma segura"""
+        try:
+            return obj.id_cliente.id_cliente.nombre_completo
+        except AttributeError:
+            return "N/A"
+    
+    def get_cliente_id(self, obj):
+        """Obtener ID del cliente de forma segura"""
+        try:
+            return obj.id_cliente.id_cliente.id_usuario
+        except AttributeError:
+            return None
