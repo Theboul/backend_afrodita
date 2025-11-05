@@ -57,6 +57,12 @@ imagen_principal_cambiada = Signal()  # args: imagen, usuario, ip
 imagen_restaurada = Signal()          # args: imagen, usuario, ip
 imagen_reordenada = Signal()          # args: imagen, usuario, ip, orden_anterior, orden_nuevo
 
+# --- GESTIÓN DE PROVEEDORES (CU7) ---
+proveedor_creado = Signal()          # args: proveedor, usuario, ip
+proveedor_actualizado = Signal()     # args: proveedor, usuario, ip, cambios
+proveedor_bloqueado = Signal()       # args: proveedor, usuario, ip, estado_anterior, estado_nuevo
+proveedor_activado = Signal()        # args: proveedor, usuario, ip, estado_anterior, estado_nuevo
+
 # --- GESTIÓN DE DIRECCIONES DE CLIENTES ---
 direccion_creada = Signal()           # args: direccion, usuario, ip, es_admin
 direccion_actualizada = Signal()      # args: direccion, usuario, ip, cambios, es_admin
@@ -1021,6 +1027,60 @@ def registrar_ticket_reabierto(sender, ticket, usuario, ip, **kwargs):
     
     AuditoriaLogger.registrar_evento(
         accion="TICKET_REOPENED",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+    # RECEIVERS: GESTIÓN DE PROVEEDORES (CU7)
+# =====================================================
+@receiver(proveedor_creado)
+def registrar_proveedor_creado(sender, proveedor, usuario, ip, **kwargs):
+    descripcion = f"Proveedor creado: {proveedor.cod_proveedor} - {proveedor.nombre}"
+    AuditoriaLogger.registrar_evento(
+        accion="PROVIDER_CREATE",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(proveedor_actualizado)
+def registrar_proveedor_actualizado(sender, proveedor, usuario, ip, cambios=None, **kwargs):
+    cambios_fmt = formatear_cambios(cambios or {})
+    descripcion = (
+        f"Proveedor actualizado: {proveedor.cod_proveedor} - {proveedor.nombre}"
+        f" | Cambios: {cambios_fmt}"
+    )
+    AuditoriaLogger.registrar_evento(
+        accion="PROVIDER_UPDATE",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(proveedor_bloqueado)
+def registrar_proveedor_bloqueado(sender, proveedor, usuario, ip, estado_anterior, estado_nuevo, **kwargs):
+    descripcion = (
+        f"Proveedor bloqueado: {proveedor.cod_proveedor} - {proveedor.nombre}"
+        f" | Estado: {estado_anterior} -> {estado_nuevo}"
+    )
+    AuditoriaLogger.registrar_evento(
+        accion="PROVIDER_BLOCK",
+        descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(proveedor_activado)
+def registrar_proveedor_activado(sender, proveedor, usuario, ip, estado_anterior, estado_nuevo, **kwargs):
+    descripcion = (
+        f"Proveedor activado: {proveedor.cod_proveedor} - {proveedor.nombre}"
+        f" | Estado: {estado_anterior} -> {estado_nuevo}"
+    )
+    AuditoriaLogger.registrar_evento(
+        accion="PROVIDER_ACTIVATE",
         descripcion=descripcion,
         ip=ip,
         usuario=usuario
