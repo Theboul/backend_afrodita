@@ -21,6 +21,8 @@ def api_root(request, format=None):
         "compras": request.build_absolute_uri("/api/compras/"),
         "bitacora": request.build_absolute_uri("/api/bitacora/"),
         "imagenes": request.build_absolute_uri("/api/imagenes/"),
+        "inventario": request.build_absolute_uri("/api/inventario/"),
+        "lotes": request.build_absolute_uri("/api/lotes/"),
         "soporte": request.build_absolute_uri("/api/soporte/"),
         "documentacion": {
             "swagger": request.build_absolute_uri("/api/docs/"),
@@ -46,6 +48,8 @@ urlpatterns = [
     path("api/bitacora/", include("apps.bitacora.urls")),
     path("api/imagenes/", include("apps.imagenes.urls")),
     path('api/catalogo/', include('apps.catalogo.urls')),
+    path("api/inventario/", include("apps.inventario.urls")),  # 🆕 Módulo de Inventario
+    path("api/lotes/", include("apps.lotes.urls")),  # 🆕 Módulo de Lotes
     path('api/soporte/', include('apps.soporte.urls')),  # Gestión de Tickets de Soporte
 
     # Documentación automática
