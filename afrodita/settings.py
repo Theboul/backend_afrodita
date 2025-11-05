@@ -62,6 +62,8 @@ INSTALLED_APPS = [
     'apps.inventario',
     'apps.lotes',
     'apps.soporte',
+    'apps.carrito',
+    'core',
 ]
 
 # Modelo de usuario personalizado

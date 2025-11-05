@@ -19,6 +19,7 @@ def api_root(request, format=None):
         "productos": request.build_absolute_uri("/api/productos/"),
         "ventas": request.build_absolute_uri("/api/ventas/"),
         "compras": request.build_absolute_uri("/api/compras/"),
+         "carrito": request.build_absolute_uri("/api/carrito/"),       
         "bitacora": request.build_absolute_uri("/api/bitacora/"),
         "imagenes": request.build_absolute_uri("/api/imagenes/"),
         "inventario": request.build_absolute_uri("/api/inventario/"),
@@ -51,6 +52,8 @@ urlpatterns = [
     path('api/soporte/', include('apps.soporte.urls')),
     path("api/inventario/", include("apps.inventario.urls")),  
     path("api/lotes/", include("apps.lotes.urls")),
+    path('api/carrito/', include('apps.carrito.urls')),
+
 
     # Documentación automática
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
