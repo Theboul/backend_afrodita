@@ -63,6 +63,11 @@ direccion_actualizada = Signal()      # args: direccion, usuario, ip, cambios, e
 direccion_eliminada = Signal()        # args: direccion, usuario, ip, es_admin
 direccion_principal_cambiada = Signal()  # args: direccion, usuario, ip, es_admin
 
+# --- GESTIÓN DE MÉTODOS DE PAGO ---
+metodo_pago_creado = Signal()         # args: metodo, usuario, ip
+metodo_pago_actualizado = Signal()    # args: metodo, usuario, ip, cambios
+metodo_pago_estado_cambiado = Signal()  # args: metodo, usuario, ip, estado_anterior, estado_nuevo
+
 # Gestión de Roles
 rol_creado = Signal()           # args: rol, usuario, ip
 rol_actualizado = Signal()      # args: rol, usuario, ip, cambios
@@ -722,6 +727,51 @@ def registrar_direccion_principal_cambiada(sender, direccion, usuario, ip, es_ad
     AuditoriaLogger.registrar_evento(
         accion="ADDRESS_SET_PRINCIPAL",
         descripcion=descripcion,
+        ip=ip,
+        usuario=usuario
+    )
+
+
+# =====================================================
+# RECEIVERS: GESTIÓN DE MÉTODOS DE PAGO
+# =====================================================
+
+@receiver(metodo_pago_creado)
+def registrar_metodo_pago_creado(sender, metodo, usuario, ip, **kwargs):
+    """Registra la creación de un método de pago"""
+    from core.constants import BitacoraActions
+    
+    AuditoriaLogger.registrar_evento(
+        accion=BitacoraActions.PAYMENT_METHOD_CREATE,
+        descripcion=f"Método de pago '{metodo.tipo}' creado por {usuario.nombre_usuario} (categoría: {metodo.categoria}, requiere_pasarela: {metodo.requiere_pasarela})",
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(metodo_pago_actualizado)
+def registrar_metodo_pago_actualizado(sender, metodo, usuario, ip, cambios, **kwargs):
+    """Registra la actualización de un método de pago"""
+    from core.constants import BitacoraActions
+    from apps.bitacora.utils import formatear_cambios
+    
+    campos = formatear_cambios(cambios)
+    AuditoriaLogger.registrar_evento(
+        accion=BitacoraActions.PAYMENT_METHOD_UPDATE,
+        descripcion=f"Método de pago '{metodo.tipo}' actualizado por {usuario.nombre_usuario} | Cambios: {campos}",
+        ip=ip,
+        usuario=usuario
+    )
+
+
+@receiver(metodo_pago_estado_cambiado)
+def registrar_metodo_pago_estado_cambiado(sender, metodo, usuario, ip, estado_anterior, estado_nuevo, **kwargs):
+    """Registra el cambio de estado de un método de pago"""
+    from core.constants import BitacoraActions
+    
+    AuditoriaLogger.registrar_evento(
+        accion=BitacoraActions.PAYMENT_METHOD_STATE_CHANGE,
+        descripcion=f"Método de pago '{metodo.tipo}' cambió de {estado_anterior} a {estado_nuevo} por {usuario.nombre_usuario}",
         ip=ip,
         usuario=usuario
     )

@@ -77,6 +77,13 @@ class BitacoraActions:
     ADDRESS_SET_PRINCIPAL = 'ADDRESS_SET_PRINCIPAL'
     
     # =====================================================
+    # GESTIÓN DE MÉTODOS DE PAGO
+    # =====================================================
+    PAYMENT_METHOD_CREATE = 'PAYMENT_METHOD_CREATE'
+    PAYMENT_METHOD_UPDATE = 'PAYMENT_METHOD_UPDATE'
+    PAYMENT_METHOD_STATE_CHANGE = 'PAYMENT_METHOD_STATE_CHANGE'
+    
+    # =====================================================
     # GESTIÓN DE ROLES Y PERMISOS (CU4)
     # =====================================================
     ROLE_CREATED = 'ROLE_CREATED'
@@ -166,6 +173,11 @@ class BitacoraActions:
             (cls.ADDRESS_UPDATE, 'Actualización de dirección de cliente'),
             (cls.ADDRESS_DELETE, 'Eliminación de dirección de cliente'),
             (cls.ADDRESS_SET_PRINCIPAL, 'Cambio de dirección principal'),
+            
+            # Métodos de Pago
+            (cls.PAYMENT_METHOD_CREATE, 'Creación de método de pago'),
+            (cls.PAYMENT_METHOD_UPDATE, 'Actualización de método de pago'),
+            (cls.PAYMENT_METHOD_STATE_CHANGE, 'Cambio de estado de método de pago'),
             
             # Roles y Permisos
             (cls.ROLE_CREATED, 'Creación de rol'),

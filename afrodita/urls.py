@@ -19,9 +19,13 @@ def api_root(request, format=None):
         "productos": request.build_absolute_uri("/api/productos/"),
         "ventas": request.build_absolute_uri("/api/ventas/"),
         "compras": request.build_absolute_uri("/api/compras/"),
+        "carrito": request.build_absolute_uri("/api/carrito/"),       
         "bitacora": request.build_absolute_uri("/api/bitacora/"),
         "imagenes": request.build_absolute_uri("/api/imagenes/"),
+        "inventario": request.build_absolute_uri("/api/inventario/"),
+        "lotes": request.build_absolute_uri("/api/lotes/"),
         "soporte": request.build_absolute_uri("/api/soporte/"),
+        "pagos": request.build_absolute_uri("/api/pagos/"),
         "documentacion": {
             "swagger": request.build_absolute_uri("/api/docs/"),
             "redoc": request.build_absolute_uri("/api/redoc/"),
@@ -38,7 +42,7 @@ urlpatterns = [
     # Módulos
     path("api/auth/", include("apps.autenticacion.urls")),
     path("api/usuarios/", include("apps.usuarios.urls")),
-    path("api/seguridad/", include("apps.seguridad.urls")),  # Gestión de Roles y Permisos
+    path("api/seguridad/", include("apps.seguridad.urls")),
     path("api/categorias/", include("apps.categoria.urls")),
     path("api/productos/", include("apps.productos.urls")),
     path("api/ventas/", include("apps.ventas.urls")),
@@ -46,7 +50,11 @@ urlpatterns = [
     path("api/bitacora/", include("apps.bitacora.urls")),
     path("api/imagenes/", include("apps.imagenes.urls")),
     path('api/catalogo/', include('apps.catalogo.urls')),
-    path('api/soporte/', include('apps.soporte.urls')),  # Gestión de Tickets de Soporte
+    path('api/soporte/', include('apps.soporte.urls')),
+    path("api/inventario/", include("apps.inventario.urls")),  
+    path("api/lotes/", include("apps.lotes.urls")),
+    path('api/carrito/', include('apps.carrito.urls')),
+    path('api/pagos/', include('apps.pagos.urls')),
 
     # Documentación automática
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
