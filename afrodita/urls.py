@@ -49,9 +49,8 @@ urlpatterns = [
     path("api/imagenes/", include("apps.imagenes.urls")),
     path('api/catalogo/', include('apps.catalogo.urls')),
     path('api/soporte/', include('apps.soporte.urls')),
-    path("api/inventario/", include("apps.inventario.urls")),  # 🆕 Módulo de Inventario
-    path("api/lotes/", include("apps.lotes.urls")),  # 🆕 Módulo de Lotes
-    path('api/soporte/', include('apps.soporte.urls')),  # Gestión de Tickets de Soporte
+    path("api/inventario/", include("apps.inventario.urls")),  
+    path("api/lotes/", include("apps.lotes.urls")),
 
     # Documentación automática
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
