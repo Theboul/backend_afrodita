@@ -220,6 +220,20 @@ class Messages:
     NO_CHANGES_DETECTED = 'Sin cambios detectados.'
     
     # =====================================================
+    # MÉTODOS DE PAGO
+    # =====================================================
+    PAYMENT_METHOD_CREATED = 'Método de pago creado correctamente.'
+    PAYMENT_METHOD_UPDATED = 'Método de pago actualizado correctamente.'
+    PAYMENT_METHOD_ACTIVATED = 'Método de pago activado correctamente.'
+    PAYMENT_METHOD_DEACTIVATED = 'Método de pago desactivado correctamente.'
+    PAYMENT_METHOD_ALREADY_ACTIVE = 'El método de pago ya está activo.'
+    PAYMENT_METHOD_ALREADY_INACTIVE = 'El método de pago ya está inactivo.'
+    PAYMENT_METHOD_NOT_FOUND = 'Método de pago no encontrado.'
+    PAYMENT_METHOD_NAME_EXISTS = 'Ya existe un método con este nombre.'
+    PAYMENT_METHOD_TYPE_INVALID = 'Tipo inválido. Use EFECTIVO, TARJETA o QR.'
+    PAYMENT_METHOD_STATE_INVALID = 'Estado inválido. Use ACTIVO o INACTIVO.'
+    
+    # =====================================================
     # MÉTODOS HELPER
     # =====================================================
     @classmethod

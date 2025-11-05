@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'apps.lotes',
     'apps.soporte',
     'apps.carrito',
+    'apps.pagos',
     'core',
 ]
 

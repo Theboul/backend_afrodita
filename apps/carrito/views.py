@@ -3,12 +3,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from django.core.exceptions import ObjectDoesNotExist # <--- 1. IMPORTAR
+from django.core.exceptions import ObjectDoesNotExist
 from apps.productos.models import Producto
 from .models import Carrito, DetalleCarrito
 from .serializers import CarritoSerializer
-# Asumo que la ruta de tu APIResponse es esta
-from core.constants.responses import APIResponse 
+from core.constants import APIResponse 
 
 
 # ==============================
