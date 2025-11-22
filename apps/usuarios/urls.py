@@ -10,6 +10,8 @@ from .views import (
     UsuarioUpdateView,
     PerfilClienteViewSet,
     DireccionClienteViewSet,
+    buscar_clientes
+    
 )
 
 # Importar las NUEVAS views de gestión administrativa
@@ -41,6 +43,7 @@ urlpatterns = [
     path("list/", UsuarioListView.as_view(), name="usuario_list"),
     path("detail/<int:id_usuario>/", UsuarioDetailView.as_view(), name="usuario_detail"),
     path("update/<int:id_usuario>/", UsuarioUpdateView.as_view(), name="usuario_update"),
+    path("buscar/", buscar_clientes, name="buscar_clientes"),
     
     # =================================================
     # ENDPOINTS CON ROUTER (ADMIN + PERFIL CLIENTE)

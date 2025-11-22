@@ -74,6 +74,11 @@ metodo_pago_creado = Signal()         # args: metodo, usuario, ip
 metodo_pago_actualizado = Signal()    # args: metodo, usuario, ip, cambios
 metodo_pago_estado_cambiado = Signal()  # args: metodo, usuario, ip, estado_anterior, estado_nuevo
 
+# --- GESTIÓN DE VENTAS ---
+venta_creada = Signal()     # args: venta, usuario, ip
+venta_anulada = Signal()    # args: venta, usuario, ip
+
+
 # Gestión de Roles
 rol_creado = Signal()           # args: rol, usuario, ip
 rol_actualizado = Signal()      # args: rol, usuario, ip, cambios
@@ -782,6 +787,28 @@ def registrar_metodo_pago_estado_cambiado(sender, metodo, usuario, ip, estado_an
         usuario=usuario
     )
 
+
+# =====================================================
+# RECEIVERS: GESTIONAR VENTAS
+# =====================================================
+
+@receiver(venta_creada)
+def registrar_venta_creada(sender, venta, usuario, ip, **kwargs):
+    AuditoriaLogger.registrar_evento(
+        accion="SALE_CREATE",
+        descripcion=f"Venta #{venta.id_venta} registrada para el cliente {venta.id_cliente.id_cliente}",
+        ip=ip,
+        usuario=usuario
+    )
+
+@receiver(venta_anulada)
+def registrar_venta_anulada(sender, venta, usuario, ip, **kwargs):
+    AuditoriaLogger.registrar_evento(
+        accion="SALE_CANCEL",
+        descripcion=f"Venta #{venta.id_venta} anulada por {usuario.nombre_usuario}",
+        ip=ip,
+        usuario=usuario
+    )
 
 # =====================================================
 # RECEIVERS: GESTIÓN DE ROLES Y PERMISOS

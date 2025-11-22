@@ -773,3 +773,40 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
                 message=Messages.ERROR_MARKING_PRINCIPAL,
                 detail=str(e)
             )
+        
+    @action(detail=True, methods=['get'], url_path='compras')
+    def listar_compras_cliente(self, request, pk=None):
+        """
+        GET /api/usuarios/admin/usuarios/{id}/compras/
+
+        Lista todas las compras (ventas) asociadas a un cliente.
+        """
+        from apps.ventas.models import Venta
+        from apps.ventas.serializers import VentaSerializer
+
+        # Obtener el usuario
+        usuario = self.get_object()
+
+        # Validar que sea cliente
+        if not usuario.id_rol or usuario.id_rol.nombre != 'CLIENTE':
+            return APIResponse.bad_request(
+                message="Solo los clientes tienen historial de compras."
+            )
+
+        # Obtener el objeto Cliente (tabla clientes)
+        try:
+            cliente = Cliente.objects.get(id_cliente=usuario.id_usuario)
+        except Cliente.DoesNotExist:
+            return APIResponse.not_found(
+                message="El cliente no existe."
+            )
+
+        # Obtener ventas
+        ventas = Venta.objects.filter(id_cliente=cliente).order_by('-id_venta')
+
+        serializer = VentaSerializer(ventas, many=True)
+
+        return APIResponse.success(
+            message="Compras obtenidas correctamente.",
+            data=serializer.data
+        )

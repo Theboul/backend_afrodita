@@ -97,6 +97,12 @@ class BitacoraActions:
     PAYMENT_METHOD_CREATE = 'PAYMENT_METHOD_CREATE'
     PAYMENT_METHOD_UPDATE = 'PAYMENT_METHOD_UPDATE'
     PAYMENT_METHOD_STATE_CHANGE = 'PAYMENT_METHOD_STATE_CHANGE'
+
+    # =====================================================
+    # GESTIÓN DE VENTAS
+    # =====================================================
+    SALE_CREATED = 'SALE_CREATED'
+    SALE_CANCELLED = 'SALE_CANCELLED'
     
     # =====================================================
     # GESTIÓN DE ROLES Y PERMISOS (CU4)
@@ -204,6 +210,10 @@ class BitacoraActions:
             (cls.PAYMENT_METHOD_CREATE, 'Creación de método de pago'),
             (cls.PAYMENT_METHOD_UPDATE, 'Actualización de método de pago'),
             (cls.PAYMENT_METHOD_STATE_CHANGE, 'Cambio de estado de método de pago'),
+
+            # Ventas
+            (cls.SALE_CREATED, 'Creación de venta'),
+            (cls.SALE_CANCELLED, 'Anulación de venta'),
             
             # Roles y Permisos
             (cls.ROLE_CREATED, 'Creación de rol'),

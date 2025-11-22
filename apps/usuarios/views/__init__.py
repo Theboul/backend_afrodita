@@ -1,6 +1,6 @@
 from .registro_cliente_view import RegistroClienteStep1View, RegistroClienteStep2View
 from .registro_roles_view import RegistroVendedorView, RegistroAdministradorView
-from .usuario_read_update_view import UsuarioListView, UsuarioDetailView, UsuarioUpdateView
+from .usuario_read_update_view import UsuarioListView, UsuarioDetailView, UsuarioUpdateView, buscar_clientes
 from .perfil_cliente import PerfilClienteViewSet
 from .direcciones_cliente import DireccionClienteViewSet
 
@@ -14,4 +14,5 @@ __all__ = [
     "UsuarioUpdateView",
     "PerfilClienteViewSet",
     "DireccionClienteViewSet",
+    "buscar_clientes",
 ]

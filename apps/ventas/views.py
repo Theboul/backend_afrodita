@@ -615,3 +615,277 @@ class StripeWebhookView(APIView):
             pass
 
         return HttpResponse(status=200)
+
+
+# apps/ventas/views.py
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from datetime import date
+
+from apps.ventas.models import Venta, DetalleVenta
+from apps.pagos.models import MetodoPago
+#from apps.carrito.models import Carrito, DetalleCarrito
+from apps.usuarios.models import Cliente, Vendedor
+from apps.productos.models import Producto
+from apps.autenticacion.utils import obtener_ip_cliente
+from apps.bitacora.signals import venta_creada, venta_anulada
+from .serializers import VentaPresencialSerializer
+from .serializers import VentaSerializer
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def crear_venta_presencial(request):
+    """
+    Registrar una venta presencial manual, SIN carrito y SIN búsqueda interna de cliente.
+    El cliente debe venir como ID (opcional).
+    """
+
+    # 1. Validar que el usuario sea vendedor
+    try:
+        vendedor = Vendedor.objects.get(id_vendedor=request.user.id_usuario)
+    except Vendedor.DoesNotExist:
+        return Response(
+            {"error": "Solo un vendedor puede registrar ventas."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # 2. Validar datos recibidos
+    serializer = VentaPresencialSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+
+    cliente_id = data.get("cliente_id")
+    metodo_pago_id = data["metodo_pago"]
+    productos_data = data["productos"]
+
+    # 3. Cliente (opcional)
+    cliente = None
+    if cliente_id:
+        cliente = Cliente.objects.filter(id_cliente=cliente_id).first()
+        if not cliente:
+            return Response(
+                {"error": "El cliente enviado no existe."},
+                status=400
+            )
+
+    # 4. Verificar método de pago
+    metodo_pago = MetodoPago.objects.filter(id_metodo_pago=metodo_pago_id).first()
+    if not metodo_pago:
+        return Response(
+            {"error": "Método de pago inválido."},
+            status=400
+        )
+
+    # 5. Validar productos + stock y calcular total
+    items_validos = []
+    monto_total = 0
+
+    for item in productos_data:
+        id_producto = item.get("id_producto")
+        cantidad = item.get("cantidad")
+
+        producto = Producto.objects.filter(id_producto=id_producto).first()
+        if not producto:
+            return Response({"error": f"El producto {id_producto} no existe."}, status=400)
+
+        if producto.stock < cantidad:
+            return Response({"error": f"Stock insuficiente para {producto.nombre}"}, status=400)
+
+        sub_total = producto.precio * cantidad
+        monto_total += sub_total
+
+        items_validos.append({
+            "producto": producto,
+            "cantidad": cantidad,
+            "precio": producto.precio,
+            "sub_total": sub_total
+        })
+
+    # 6. Crear Venta
+    venta = Venta.objects.create(
+        fecha=date.today(),
+        monto_total=monto_total,
+        estado="COMPLETADO",   # venta presencial siempre se cierra
+        id_metodo_pago=metodo_pago,
+        id_cliente=cliente,
+        id_vendedor=vendedor,
+        id_promocion=None,
+        cod_envio=None
+    )
+
+    # 7. Crear Detalles + descontar stock
+    for item in items_validos:
+        DetalleVenta.objects.create(
+            id_venta=venta,
+            id_producto=item["producto"],
+            cantidad=item["cantidad"],
+            precio=item["precio"],
+            sub_total=item["sub_total"],
+            id_lote=None
+        )
+
+        # Actualizar stock del producto
+        p = item["producto"]
+        p.stock -= item["cantidad"]
+        p.save()
+
+    # 8. Registrar bitácora
+    ip = obtener_ip_cliente(request)
+    venta_creada.send(
+        sender=Venta,
+        venta=venta,
+        usuario=request.user,
+        ip=ip
+    )
+
+    # 9. Respuesta final
+    from apps.ventas.serializers import VentaSerializer
+    return Response(
+        {
+            "message": "Venta presencial registrada correctamente.",
+            "venta": VentaSerializer(venta).data
+        },
+        status=201
+    )
+
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def anular_venta(request, id_venta):
+
+    # 1 Verificar si es vendedor o admin
+    es_admin = request.user.is_superuser or request.user.is_staff
+    es_vendedor = Vendedor.objects.filter(id_vendedor=request.user.id_usuario).exists()
+
+    if not (es_admin or es_vendedor):
+        return Response(
+            {"error": "No tiene permisos para anular una venta."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # 2 Obtener la venta
+    venta = get_object_or_404(Venta, id_venta=id_venta)
+
+    # 3 Validar si ya está anulada
+    if venta.estado == "ANULADA":
+        return Response(
+            {"error": "La venta ya se encuentra anulada."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 4 Validar estados permitidos
+    if venta.estado not in ["PENDIENTE", "COMPLETADO"]:
+        return Response(
+            {"error": f"No se puede anular una venta con estado {venta.estado}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 5 Revertir stock
+    detalles = venta.detalles.all()
+
+    for det in detalles:
+        producto = det.id_producto
+        producto.stock += det.cantidad
+        producto.save()
+
+    # 6 Cambiar estado de venta
+    venta.estado = "ANULADA"
+    venta.save()
+
+    ip= obtener_ip_cliente(request)
+    venta_anulada.send(
+        sender=Venta,
+        venta=venta,
+        usuario=request.user,
+        ip=ip
+    )
+
+    return Response(
+        {
+            "message": "Venta anulada correctamente",
+            "venta": {
+                "id_venta": venta.id_venta,
+                "estado": venta.estado
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def obtener_venta(request, id_venta):
+    venta = get_object_or_404(Venta, id_venta=id_venta)
+    serializer = VentaSerializer(venta)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def listar_ventas(request):
+
+    # Verificar acceso (admin o vendedor)
+    es_admin = request.user.is_superuser or request.user.is_staff
+    es_vendedor = Vendedor.objects.filter(id_vendedor=request.user.id_usuario).exists()
+
+    if not (es_admin or es_vendedor):
+        return Response(
+            {"error": "No tiene permisos para ver las ventas."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    ventas = Venta.objects.all().order_by('-id_venta')
+    serializer = VentaSerializer(ventas, many=True)
+
+    return Response({
+        "success": True,
+        "message": "Ventas obtenidas correctamente.",
+        "data": serializer.data
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def confirmar_pago_manual(request, id_venta):
+
+    # Verificar permisos (admin o vendedor)
+    es_admin = request.user.is_superuser or request.user.is_staff
+    es_vendedor = Vendedor.objects.filter(id_vendedor=request.user.id_usuario).exists()
+
+    if not (es_admin or es_vendedor):
+        return Response(
+            {"error": "No tiene permisos para confirmar el pago."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # Obtener venta
+    venta = get_object_or_404(Venta, id_venta=id_venta)
+
+    # Validar estados
+    if venta.estado == "ANULADA":
+        return Response({"error": "No se puede confirmar pago de una venta anulada."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if venta.estado == "COMPLETADO":
+        return Response({"error": "La venta ya está completada."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Marcar como completado
+    venta.estado = "COMPLETADO"
+    venta.save()
+
+    return Response({
+        "success": True,
+        "message": "Pago confirmado correctamente.",
+        "venta": VentaSerializer(venta).data
+    }, status=200)

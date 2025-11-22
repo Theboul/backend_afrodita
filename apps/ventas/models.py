@@ -49,13 +49,82 @@ class PaymentTransaction(models.Model):
 
 
 class Venta(models.Model):
-    id_venta = models.IntegerField(primary_key=True)
-    monto_total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    estado = models.CharField(max_length=20, null=True, blank=True)
+    id_venta = models.AutoField(primary_key=True)
+    fecha = models.DateField()
+    monto_total = models.DecimalField(max_digits=10, decimal_places=2)
+    estado = models.CharField(max_length=15)
+
+    id_metodo_pago = models.ForeignKey(
+        'pagos.MetodoPago',
+        db_column='id_metodo_pago',
+        on_delete=models.CASCADE
+    )
+
+    cod_envio = models.ForeignKey(
+        'envio.Envio',
+        db_column='cod_envio',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    id_promocion = models.ForeignKey(
+        'promocion.Promocion',
+        db_column='id_promocion',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    id_cliente = models.ForeignKey(
+        'usuarios.Cliente',
+        db_column='id_cliente',
+        on_delete=models.CASCADE
+    )
+
+    id_vendedor = models.ForeignKey(
+        'usuarios.Vendedor',
+        db_column='id_vendedor',
+        on_delete=models.CASCADE
+    )
 
     class Meta:
         db_table = 'venta'
         managed = False
 
     def __str__(self):
-        return f"Venta {self.id_venta}"
+        return f"Venta #{self.id_venta}"
+
+class DetalleVenta(models.Model):
+    id_detalle_venta = models.AutoField(primary_key=True)
+
+    id_producto = models.ForeignKey(
+        'productos.Producto',
+        to_field='id_producto',
+        db_column='id_producto',
+        on_delete=models.CASCADE
+    )
+    id_venta = models.ForeignKey(
+        Venta,
+        db_column='id_venta',
+        on_delete=models.CASCADE,
+        related_name='detalles'
+    )
+    cantidad = models.IntegerField()
+    precio = models.DecimalField(max_digits=10, decimal_places=2)
+    sub_total = models.DecimalField(max_digits=10, decimal_places=2)
+
+    id_lote = models.ForeignKey(
+        'lotes.Lote',
+        db_column='id_lote',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'detalle_venta'
+        managed = False
+
+    def __str__(self):
+        return f"Detalle #{self.id_detalle_venta}"

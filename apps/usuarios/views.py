@@ -1,10 +1,14 @@
 from rest_framework.views import APIView
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status, permissions
+from rest_framework.permissions import IsAuthenticated
+
 from .serializers import (
     RegistroVendedorSerializer,
     RegistroAdministradorSerializer,
 )
+
 
 # =====================================================
 # VISTA BASE REUTILIZABLE
@@ -37,13 +41,12 @@ class RegistroBaseView(APIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 
 
 # =====================================================
 # VISTAS ESPECÍFICAS
 # =====================================================
-
-
 
 class RegistroVendedorView(RegistroBaseView):
     """Endpoint: /api/auth/register/vendedor/"""
@@ -53,3 +56,5 @@ class RegistroVendedorView(RegistroBaseView):
 class RegistroAdministradorView(RegistroBaseView):
     """Endpoint: /api/auth/register/admin/"""
     serializer_class = RegistroAdministradorSerializer
+
+
