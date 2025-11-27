@@ -647,14 +647,22 @@ def crear_venta_presencial(request):
     El cliente debe venir como ID (opcional).
     """
 
-    # 1. Validar que el usuario sea vendedor
+    # 1. Validar que el usuario sea vendedor o admin con perfil de vendedor
+    vendedor = None
     try:
         vendedor = Vendedor.objects.get(id_vendedor=request.user.id_usuario)
     except Vendedor.DoesNotExist:
-        return Response(
-            {"error": "Solo un vendedor puede registrar ventas."},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        es_admin = request.user.is_superuser or request.user.is_staff
+        if es_admin:
+            return Response(
+                {"error": "Este usuario administrador no tiene un perfil de vendedor asociado para registrar la venta."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        else:
+            return Response(
+                {"error": "Solo un vendedor puede registrar ventas."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     # 2. Validar datos recibidos
     serializer = VentaPresencialSerializer(data=request.data)
