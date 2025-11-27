@@ -72,7 +72,7 @@ INSTALLED_APPS = [
     'core',
     'apps.proveedores',
     'apps.envio',
-    'apps.promocion',
+    'apps.promocion', 
 ]
 
 # Modelo de usuario personalizado
