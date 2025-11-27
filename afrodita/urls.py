@@ -27,6 +27,7 @@ def api_root(request, format=None):
         "soporte": request.build_absolute_uri("/api/soporte/"),
         "pagos": request.build_absolute_uri("/api/pagos/"),
         "ventas": request.build_absolute_uri("/api/ventas/"),
+        "devoluciones": request.build_absolute_uri("/api/devoluciones/"),
         "documentacion": {
             "swagger": request.build_absolute_uri("/api/docs/"),
             "redoc": request.build_absolute_uri("/api/redoc/"),
@@ -58,6 +59,7 @@ urlpatterns = [
     path('api/pagos/', include('apps.pagos.urls')),
     path('api/proveedores/', include('apps.proveedores.urls')),
     path('api/ventas/', include('apps.ventas.urls')),
+    path('api/devoluciones/', include('apps.devoluciones.urls')),
 
     # Documentación automática
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

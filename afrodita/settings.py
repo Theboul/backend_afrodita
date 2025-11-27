@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'apps.proveedores',
     'apps.envio',
     'apps.promocion',
+    'apps.devoluciones',
 ]
 
 # Modelo de usuario personalizado
