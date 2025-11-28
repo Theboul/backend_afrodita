@@ -1,6 +1,6 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from django.db import transaction
 from django.db.models import Q
 from .models import MetodoPago
@@ -12,6 +12,8 @@ from apps.bitacora.signals import (
     metodo_pago_actualizado,
     metodo_pago_estado_cambiado,
 )
+from apps.ventas.models import PaymentTransaction
+from apps.ventas.serializers import PaymentTransactionSerializer
 
 
 class PaymentMethodViewSet(viewsets.ModelViewSet):
@@ -118,3 +120,33 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
             estado_anterior=anterior, estado_nuevo=metodo.activo
         )
         return APIResponse.success(Messages.PAYMENT_METHOD_ACTIVATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def conciliar_transaccion(request):
+    """
+    Busca una transacci�n por id_venta y referencia_externa (paymentIntent id) para conciliaci�n manual.
+    """
+    try:
+        id_venta = request.data.get("id_venta")
+        referencia = request.data.get("referencia") or request.data.get("referencia_externa")
+
+        if not id_venta or not referencia:
+            return APIResponse.bad_request(
+                "Debe enviar id_venta y referencia (paymentIntent id).",
+                errors={"id_venta": "Obligatorio", "referencia": "Obligatorio"},
+            )
+
+        trans = PaymentTransaction.objects.filter(
+            id_venta=id_venta,
+            referencia_externa=referencia,
+        ).first()
+
+        if not trans:
+            return APIResponse.not_found("No se encontr� la transacci�n con esos datos.")
+
+        data = PaymentTransactionSerializer(trans).data
+        return APIResponse.success("Transacci�n encontrada.", {"transaccion": data})
+    except Exception as e:
+        return APIResponse.server_error("Error al conciliar la transacci�n.", detail=str(e))

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Venta, DetalleVenta
+from .models import Venta, DetalleVenta, PaymentTransaction
 
 class DetalleVentaSerializer(serializers.ModelSerializer):
     nombre_producto = serializers.CharField(source='id_producto.nombre', read_only=True)
@@ -88,3 +88,21 @@ class VentaOnlineSerializer(serializers.Serializer):
     productos = serializers.ListField(
         child=ProductoVentaOnlineSerializer(), min_length=1
     )
+
+
+class PaymentTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentTransaction
+        fields = [
+            "id_transaccion",
+            "id_venta",
+            "id_metodo_pago",
+            "monto",
+            "fecha_transaccion",
+            "estado_transaccion",
+            "referencia_externa",
+            "descripcion",
+            "codigo_error",
+            "procesado_por",
+            "observacion",
+        ]
