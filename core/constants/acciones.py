@@ -119,6 +119,15 @@ class BitacoraActions:
     PERMISSION_REVOKED_FROM_USER = 'PERMISSION_REVOKED_FROM_USER'
     
     # =====================================================
+    # RESEÑAS DE PRODUCTO (CU26)
+    # =====================================================
+    REVIEW_CREATED = 'REVIEW_CREATED'
+    REVIEW_PUBLISHED = 'REVIEW_PUBLISHED'
+    REVIEW_REJECTED = 'REVIEW_REJECTED'
+    REVIEW_HIDDEN = 'REVIEW_HIDDEN'
+    REVIEW_DELETED = 'REVIEW_DELETED'
+    
+    # =====================================================
     # GESTIÓN DE SOPORTE/TICKETS (CU25)
     # =====================================================
     TICKET_CREATED = 'TICKET_CREATED'
@@ -227,6 +236,12 @@ class BitacoraActions:
             (cls.PERMISSION_GRANTED_TO_USER, 'Concesión de permiso individual a usuario'),
             (cls.PERMISSION_REVOKED_FROM_USER, 'Revocación de permiso individual de usuario'),
             
+            # Resenas de producto (CU26)
+            (cls.REVIEW_CREATED, 'Resena creada'),
+            (cls.REVIEW_PUBLISHED, 'Resena publicada'),
+            (cls.REVIEW_REJECTED, 'Resena rechazada'),
+            (cls.REVIEW_HIDDEN, 'Resena ocultada'),
+            (cls.REVIEW_DELETED, 'Resena eliminada'),
             # Soporte/Tickets
             (cls.TICKET_CREATED, 'Creación de ticket de soporte'),
             (cls.TICKET_RESPONDED, 'Respuesta en ticket de soporte'),

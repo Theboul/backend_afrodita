@@ -27,6 +27,7 @@ def api_root(request, format=None):
         "soporte": request.build_absolute_uri("/api/soporte/"),
         "pagos": request.build_absolute_uri("/api/pagos/"),
         "ventas": request.build_absolute_uri("/api/ventas/"),
+        "promociones": request.build_absolute_uri("/api/promociones/"),
         "documentacion": {
             "swagger": request.build_absolute_uri("/api/docs/"),
             "redoc": request.build_absolute_uri("/api/redoc/"),
@@ -58,6 +59,8 @@ urlpatterns = [
     path('api/pagos/', include('apps.pagos.urls')),
     path('api/proveedores/', include('apps.proveedores.urls')),
     path('api/ventas/', include('apps.ventas.urls')),
+    path('api/promociones/', include('apps.promocion.urls')),
+    path('api/resenas/', include('apps.resenas.urls')),
     path('api/reportes/', include('apps.reportes.urls')),
 
     # Documentación automática
