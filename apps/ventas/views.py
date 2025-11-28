@@ -16,6 +16,7 @@ import secrets
 import stripe
 
 from rest_framework.decorators import action, api_view
+from rest_framework.pagination import PageNumberPagination
 from rest_framework import viewsets, status
 
 from django.db.models import Sum
@@ -850,14 +851,17 @@ def listar_ventas(request):
             status=status.HTTP_403_FORBIDDEN
         )
 
-    ventas = Venta.objects.all().order_by('-id_venta')
-    serializer = VentaSerializer(ventas, many=True)
+    # Configuración de la paginación
+    paginator = PageNumberPagination()
+    paginator.page_size = 15  # Puedes ajustar este número según tus necesidades
 
-    return Response({
-        "success": True,
-        "message": "Ventas obtenidas correctamente.",
-        "data": serializer.data
-    })
+    ventas = Venta.objects.all().order_by('-id_venta')
+    paginated_ventas = paginator.paginate_queryset(ventas, request)
+
+    serializer = VentaSerializer(paginated_ventas, many=True)
+
+    # La respuesta paginada ya incluye 'count', 'next', 'previous' y 'results'
+    return paginator.get_paginated_response(serializer.data)
 
 
 @api_view(['POST'])
