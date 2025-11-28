@@ -9,12 +9,16 @@ from .acciones import BitacoraActions
 from .seguridad import SecurityConstants
 from .catalogo import CatalogConfig, ProductConfig
 from .soporte import TicketStatus, TicketType
+from .promocion import PromotionStatus, PromotionType
+from .resenas import ReviewStatus, ReviewPolicy
 
 __all__ = [
     'UserStatus',
     'ProductStatus',
     'CategoryStatus',
     'ImageStatus',
+    'PromotionStatus',
+    'PromotionType',
     'APIResponse',
     'Messages',
     'BitacoraActions',
@@ -23,4 +27,6 @@ __all__ = [
     'ProductConfig',
     'TicketStatus',
     'TicketType',
+    'ReviewStatus',
+    'ReviewPolicy',
 ]

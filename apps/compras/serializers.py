@@ -163,7 +163,7 @@ class CrearDevolucionCompraSerializer(serializers.Serializer):
 class ItemCrearOrdenSerializer(serializers.Serializer):
     id_producto = serializers.CharField(max_length=5)
     cantidad = serializers.IntegerField(min_value=1)
-    precio = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0.01)
+    precio = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
 
     def validate_id_producto(self, value):
         if not Producto.objects.filter(id_producto=value).exists():

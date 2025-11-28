@@ -234,6 +234,21 @@ class Messages:
     PAYMENT_METHOD_STATE_INVALID = 'Estado inválido. Use ACTIVO o INACTIVO.'
     
     # =====================================================
+    # =====================================================
+    # RESENAS DE PRODUCTO (CU26)
+    # =====================================================
+    REVIEW_CREATED_PENDING = 'Resena registrada y pendiente de revision.'
+    REVIEW_PUBLISHED = 'Resena publicada correctamente.'
+    REVIEW_AUTO_PUBLISHED = 'Resena publicada automaticamente.'
+    REVIEW_UPDATED = 'Resena actualizada correctamente.'
+    REVIEW_DELETED = 'Resena eliminada correctamente.'
+    REVIEW_NOT_FOUND = 'Resena no encontrada.'
+    REVIEW_FORBIDDEN = 'No puedes gestionar esta resena.'
+    REVIEW_INVALID_PURCHASE = 'No puedes resenar este producto.'
+    REVIEW_INVALID_RATING = 'La calificacion debe estar entre 1 y 5.'
+    REVIEW_REJECTED = 'Resena rechazada.'
+    REVIEW_HIDDEN = 'Resena ocultada.'
+
     # MÉTODOS HELPER
     # =====================================================
     @classmethod

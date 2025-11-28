@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.utils import timezone
@@ -54,6 +55,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
         'id_configuracion',
         'id_configuracion__id_medida'
     ).prefetch_related('imagenes')
+    lookup_field = 'id_producto'
     
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['id_categoria', 'estado_producto']
