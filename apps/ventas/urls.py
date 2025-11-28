@@ -13,6 +13,7 @@ from .views import (
     StripeCreateIntentView,
     StripeWebhookView,
     create_payment_intent,
+    VentaOnlineView,
 )
 
 urlpatterns = [
@@ -20,6 +21,7 @@ urlpatterns = [
     # ----------- RUTAS PRINCIPALES SIN CONFLICTOS -----------
     path("", listar_ventas, name="listar_ventas"),
     path("presencial/", crear_venta_presencial, name="venta_presencial"),
+    path("online/", VentaOnlineView.as_view(), name="venta_online"),
 
     # ----------- RUTAS DE PAGOS (ANTES DE <int:id_venta>!) -----------
     path("metodos-pago/", PaymentMethodsDBView.as_view(), name="ventas-metodos-pago"),

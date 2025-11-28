@@ -72,3 +72,19 @@ class VentaPresencialSerializer(serializers.Serializer):
     productos = serializers.ListField(
         child=serializers.DictField(), min_length=1, required=True
     )
+
+
+# --- Serializers para Venta Online ---
+
+class ProductoVentaOnlineSerializer(serializers.Serializer):
+    """Valida cada producto en la lista de una venta online."""
+    id_producto = serializers.CharField(max_length=20)
+    cantidad = serializers.IntegerField(min_value=1)
+
+
+class VentaOnlineSerializer(serializers.Serializer):
+    """Valida el payload completo para crear una venta online."""
+    id_direccion = serializers.IntegerField()
+    productos = serializers.ListField(
+        child=ProductoVentaOnlineSerializer(), min_length=1
+    )

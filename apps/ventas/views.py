@@ -2,10 +2,12 @@ from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.conf import settings
 from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import api_view
 from rest_framework import status
 from decimal import Decimal
+from stripe import StripeError
 import base64
 import hashlib
 import hmac
@@ -14,7 +16,6 @@ import secrets
 import stripe
 
 from rest_framework.decorators import action, api_view
-from rest_framework.response import Response
 from rest_framework import viewsets, status
 
 from django.db.models import Sum
@@ -22,7 +23,15 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 
 
-from .models import MetodoPago, PaymentTransaction, Venta, PaymentState
+from .models import Venta, DetalleVenta, PaymentTransaction, PaymentState
+from apps.pagos.models import MetodoPago
+from apps.usuarios.models import Cliente, Vendedor, DireccionCliente
+from apps.productos.models import Producto
+from apps.envio.models import Envio, TipoEnvio
+from apps.autenticacion.utils import obtener_ip_cliente
+from apps.bitacora.signals import venta_creada, venta_anulada
+from .serializers import VentaPresencialSerializer, VentaOnlineSerializer, VentaSerializer
+
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -627,16 +636,6 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from datetime import date
 
-from apps.ventas.models import Venta, DetalleVenta
-from apps.pagos.models import MetodoPago
-#from apps.carrito.models import Carrito, DetalleCarrito
-from apps.usuarios.models import Cliente, Vendedor
-from apps.productos.models import Producto
-from apps.autenticacion.utils import obtener_ip_cliente
-from apps.bitacora.signals import venta_creada, venta_anulada
-from .serializers import VentaPresencialSerializer
-from .serializers import VentaSerializer
-
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -647,14 +646,22 @@ def crear_venta_presencial(request):
     El cliente debe venir como ID (opcional).
     """
 
-    # 1. Validar que el usuario sea vendedor
+    # 1. Validar que el usuario sea vendedor o admin con perfil de vendedor
+    vendedor = None
     try:
         vendedor = Vendedor.objects.get(id_vendedor=request.user.id_usuario)
     except Vendedor.DoesNotExist:
-        return Response(
-            {"error": "Solo un vendedor puede registrar ventas."},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        es_admin = request.user.is_superuser or request.user.is_staff
+        if es_admin:
+            return Response(
+                {"error": "Este usuario administrador no tiene un perfil de vendedor asociado para registrar la venta."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        else:
+            return Response(
+                {"error": "Solo un vendedor puede registrar ventas."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     # 2. Validar datos recibidos
     serializer = VentaPresencialSerializer(data=request.data)
@@ -889,3 +896,208 @@ def confirmar_pago_manual(request, id_venta):
         "message": "Pago confirmado correctamente.",
         "venta": VentaSerializer(venta).data
     }, status=200)
+    
+class VentaOnlineView(APIView):
+    """
+    Vista para gestionar la creación de ventas desde el carrito del cliente (online).
+    """
+    permission_classes = [IsAuthenticated]
+ 
+    @transaction.atomic
+    def post(self, request):
+        print("🔍 [DEBUG] === INICIO VentaOnlineView ===")
+        print(f"🔍 [DEBUG] Request data recibido: {request.data}")
+        
+        serializer = VentaOnlineSerializer(data=request.data)
+        if not serializer.is_valid():
+            print(f"❌ [ERROR] Validación del serializer falló: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        productos_data = data["productos"]
+        id_direccion = data["id_direccion"]
+        
+        print(f"✅ [DEBUG] Datos validados - Productos: {len(productos_data)}, Dirección: {id_direccion}")
+
+        # 1. Validar que el usuario sea un cliente
+        try:
+            cliente = Cliente.objects.get(id_cliente=request.user.id_usuario)
+            print(f"✅ [DEBUG] Cliente encontrado: {cliente.id_cliente}")
+        except Cliente.DoesNotExist:
+            print(f"❌ [ERROR] Usuario {request.user.id_usuario} no es un cliente")
+            return Response({"error": "El usuario no es un cliente válido."}, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Validar dirección
+        direccion = DireccionCliente.objects.filter(id_direccion=id_direccion, id_cliente=cliente).first()
+        if not direccion:
+            print(f"❌ [ERROR] Dirección {id_direccion} no encontrada para cliente {cliente.id_cliente}")
+            return Response({"error": "La dirección de envío no es válida o no pertenece a este cliente."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        print(f"✅ [DEBUG] Dirección validada: {direccion.id_direccion}")
+
+        # 3. Validar productos, stock y calcular total
+        monto_total = Decimal('0')
+        detalles_para_crear = []
+        
+        print(f"🔍 [DEBUG] Validando {len(productos_data)} productos...")
+        
+        for idx, item in enumerate(productos_data):
+            print(f"🔍 [DEBUG] Producto {idx+1}: ID={item['id_producto']}, Cantidad={item['cantidad']}")
+            
+            try:
+                producto = Producto.objects.get(id_producto=item['id_producto'])
+                print(f"✅ [DEBUG] Producto encontrado: {producto.nombre}, Stock: {producto.stock}, Precio: {producto.precio}")
+            except Producto.DoesNotExist:
+                print(f"❌ [ERROR] Producto {item['id_producto']} no existe")
+                return Response({"error": f"El producto {item['id_producto']} no existe."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if producto.stock < item['cantidad']:
+                print(f"❌ [ERROR] Stock insuficiente para {producto.nombre}. Disponible: {producto.stock}, Requerido: {item['cantidad']}")
+                return Response({"error": f"Stock insuficiente para el producto: {producto.nombre}"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            subtotal = producto.precio * item['cantidad']
+            monto_total += subtotal
+            
+            print(f"✅ [DEBUG] Subtotal calculado: {subtotal}, Total acumulado: {monto_total}")
+            
+            detalles_para_crear.append({
+                "producto": producto,
+                "cantidad": item['cantidad'],
+                "precio": producto.precio,
+                "subtotal": subtotal
+            })
+
+        print(f"✅ [DEBUG] Monto total de la venta: {monto_total}")
+
+        # Obtener el método de pago para ventas online (ID 5)
+        try:
+            metodo_pago_online = MetodoPago.objects.get(id_metodo_pago=5)
+            print(f"✅ [DEBUG] Método de pago encontrado: {metodo_pago_online.tipo}")
+        except MetodoPago.DoesNotExist:
+            print("❌ [ERROR] Método de pago con ID 5 no existe")
+            return Response({"error": "El método de pago no está configurado correctamente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Obtener el vendedor por defecto (ID 3)
+        try:
+            vendedor_online = Vendedor.objects.get(id_vendedor=3)
+            print(f"✅ [DEBUG] Vendedor online encontrado: {vendedor_online.id_vendedor}")
+        except Vendedor.DoesNotExist:
+            print("❌ [ERROR] Vendedor con ID 3 no existe")
+            return Response({"error": "El vendedor del sistema no está configurado."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 4. Crear el registro de Envío
+        try:
+            tipo_envio_domicilio = TipoEnvio.objects.get(cod_tipo_envio=1)
+            print(f"✅ [DEBUG] Tipo de envío encontrado: {tipo_envio_domicilio.cod_tipo_envio}")
+        except TipoEnvio.DoesNotExist:
+            print("❌ [ERROR] TipoEnvio con cod_tipo_envio=1 no existe")
+            return Response({"error": "El tipo de envío no está configurado."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        print("🔍 [DEBUG] Creando registro de envío...")
+        nuevo_envio = Envio.objects.create(
+            cod_tipo_envio=tipo_envio_domicilio,
+            estado_envio='EN PREPARACION',
+            id_direccion=direccion,
+            fecha_envio=date.today(),
+            costo=Decimal('0.00')
+        )
+        print(f"✅ [DEBUG] Envío creado con ID: {nuevo_envio.cod_envio}")
+
+        # 5. Crear la venta
+        print("🔍 [DEBUG] Creando venta...")
+        venta = Venta.objects.create(
+            fecha=date.today(),
+            id_cliente=cliente,
+            monto_total=monto_total,
+            estado='PENDIENTE',
+            id_vendedor=vendedor_online,
+            id_promocion=None,
+            cod_envio=nuevo_envio,
+            id_metodo_pago=metodo_pago_online, 
+        )
+        print(f"✅ [DEBUG] Venta creada con ID: {venta.id_venta}")
+
+        # 6. Crear detalles y descontar stock
+        print("🔍 [DEBUG] Creando detalles de venta...")
+        for detalle_data in detalles_para_crear:
+            DetalleVenta.objects.create(
+                id_venta=venta,
+                id_producto=detalle_data['producto'],
+                cantidad=detalle_data['cantidad'],
+                precio=detalle_data['precio'],
+                sub_total=detalle_data['subtotal']
+            )
+            detalle_data['producto'].stock -= detalle_data['cantidad']
+            detalle_data['producto'].save()
+            print(f"✅ [DEBUG] Detalle creado para producto: {detalle_data['producto'].nombre}")
+
+        # 7. Iniciar el pago con Stripe
+        print("🔍 [DEBUG] Iniciando proceso de pago con Stripe...")
+        try:
+            # Verificar que la API key esté configurada
+            if not settings.STRIPE_SECRET_KEY:
+                print("❌ [ERROR] STRIPE_SECRET_KEY no está configurada en settings.py")
+                return Response(
+                    {"error": "El sistema de pagos no está configurado. Contacta al administrador."}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            # Crear la transacción de pago pendiente
+            trans = PaymentTransaction.objects.create(
+                id_venta=venta.id_venta,
+                id_metodo_pago=metodo_pago_online.id_metodo_pago,
+                monto=monto_total,
+                fecha_transaccion=timezone.now(),
+                estado_transaccion=PaymentState.PENDIENTE,
+                descripcion=f"Intento de pago para Venta #{venta.id_venta}",
+            )
+            print(f"✅ [DEBUG] Transacción creada con ID: {trans.id_transaccion}")
+
+            # Configurar Stripe
+            stripe.api_key = settings.STRIPE_SECRET_KEY
+            currency = getattr(settings, "STRIPE_CURRENCY", "usd").lower()
+            
+            # Convertir correctamente el monto a centavos
+            amount_cents = int(float(monto_total) * 100)
+            print(f"🔍 [DEBUG] Monto en centavos: {amount_cents}, Moneda: {currency}")
+            
+            # Crear el PaymentIntent en Stripe
+            intent = stripe.PaymentIntent.create(
+                amount=amount_cents,
+                currency=currency,
+                description=f"Pago de orden #{venta.id_venta}",
+                metadata={
+                    "id_venta": str(venta.id_venta),
+                    "id_transaccion": str(trans.id_transaccion),
+                },
+                automatic_payment_methods={"enabled": True},
+            )
+            print(f"✅ [DEBUG] PaymentIntent creado: {intent.get('id')}")
+
+            # Guardar la referencia de Stripe
+            trans.referencia_externa = intent.get("id")
+            trans.save(update_fields=["referencia_externa"])
+            print(f"✅ [DEBUG] Referencia guardada en transacción")
+
+        except StripeError as e:  # ← CORREGIDO
+            print(f"❌ [ERROR] Error de Stripe: {str(e)}")
+            return Response(
+                {"error": f"Error al procesar el pago con Stripe: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except Exception as e:
+            print(f"❌ [ERROR] Error inesperado: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"error": f"Ocurrió un error inesperado al iniciar el pago: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # 8. Respuesta exitosa
+        print(f"✅ [DEBUG] Proceso completado exitosamente")
+        return Response({
+            "client_secret": intent.get("client_secret"),
+            "reference": intent.get("id"),
+            "id_venta": venta.id_venta
+        }, status=status.HTTP_201_CREATED)
