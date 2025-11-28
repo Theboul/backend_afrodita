@@ -1,24 +1,6 @@
 from django.db import models
 
 
-class MetodoPago(models.Model):
-    id_metodo_pago = models.IntegerField(primary_key=True)
-    tipo = models.CharField(max_length=30)
-    categoria = models.CharField(max_length=20, default='FISICO')
-    requiere_pasarela = models.BooleanField(default=False)
-    codigo_pasarela = models.CharField(max_length=30, null=True, blank=True)
-    descripcion = models.TextField(null=True, blank=True)
-    activo = models.BooleanField(default=True)
-
-    class Meta:
-        db_table = 'metodo_pago'
-        managed = False
-        ordering = ['id_metodo_pago']
-
-    def __str__(self):
-        return f"{self.id_metodo_pago} - {self.tipo}"
-
-
 class PaymentState:
     PENDIENTE = 'PENDIENTE'
     COMPLETADO = 'COMPLETADO'
