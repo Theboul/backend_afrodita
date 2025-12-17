@@ -10,6 +10,7 @@ from .views import (
     PaymentStatusDBView,
     ConfirmarPagoDBView,
     VentaPaymentSummaryView,
+    PaymentTransactionListView,
     StripeCreateIntentView,
     StripeWebhookView,
     create_payment_intent,
@@ -29,6 +30,7 @@ urlpatterns = [
     path("pagos/<str:referencia>/", PaymentStatusDBView.as_view(), name="ventas-estado-pago"),
     path("confirmar-pago/", ConfirmarPagoDBView.as_view(), name="ventas-confirmar-pago"),
     path("venta/<int:id_venta>/resumen/", VentaPaymentSummaryView.as_view(), name="ventas-resumen-venta"),
+    path("transacciones/", PaymentTransactionListView.as_view(), name="ventas-transacciones"),
 
     # ----------- STRIPE -----------
     path("stripe/create-intent/", StripeCreateIntentView.as_view(), name="ventas-stripe-create-intent"),

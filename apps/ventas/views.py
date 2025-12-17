@@ -31,7 +31,12 @@ from apps.productos.models import Producto
 from apps.envio.models import Envio, TipoEnvio
 from apps.autenticacion.utils import obtener_ip_cliente
 from apps.bitacora.signals import venta_creada, venta_anulada
-from .serializers import VentaPresencialSerializer, VentaOnlineSerializer, VentaSerializer
+from .serializers import (
+    VentaPresencialSerializer,
+    VentaOnlineSerializer,
+    VentaSerializer,
+    PaymentTransactionSerializer,
+)
 
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -278,6 +283,18 @@ class PaymentStatusView(APIView):
                 "message": f"Error al consultar estado: {e}",
                 "data": None,
             }, status=500)
+
+
+class PaymentTransactionListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        paginator = PageNumberPagination()
+        paginator.page_size = int(request.query_params.get("page_size", 20))
+        queryset = PaymentTransaction.objects.all()
+        page = paginator.paginate_queryset(queryset, request)
+        serializer = PaymentTransactionSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class ConfirmarPagoView(APIView):
