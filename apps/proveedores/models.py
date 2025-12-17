@@ -12,6 +12,7 @@ class Proveedor(models.Model):
     telefono = models.CharField(max_length=20, null=True, blank=True)
     direccion = models.CharField(max_length=100, null=True, blank=True)
     pais = models.CharField(max_length=30, null=True, blank=True)
+    tipo = models.CharField(max_length=30, null=True, blank=True)
     estado_proveedor = models.CharField(max_length=10, default='ACTIVO')
 
     class Meta:

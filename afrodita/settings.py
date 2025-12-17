@@ -24,6 +24,12 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+IP_WHITELIST = [
+    ip.strip()
+    for ip in os.getenv('IP_WHITELIST', '127.0.0.1,::1').split(',')
+    if ip.strip()
+]
+
 # Stripe (opcional)
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')

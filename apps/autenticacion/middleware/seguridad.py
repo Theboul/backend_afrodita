@@ -1,6 +1,7 @@
 """
 Middlewares de seguridad para el sistema de autenticación.
 """
+from django.conf import settings
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -10,6 +11,7 @@ from core.constants import Messages, SecurityConstants
 import logging
 
 logger = logging.getLogger(__name__)
+SAFE_IPS = set(getattr(settings, 'IP_WHITELIST', []))
 
 
 class JWTCookieAuthenticationMiddleware(MiddlewareMixin):
@@ -73,6 +75,9 @@ class IPBlacklistMiddleware(MiddlewareMixin):
         
         ip = obtener_ip_cliente(request)
         
+        if ip in SAFE_IPS:
+            return None
+
         if IPBlacklist.esta_bloqueada(ip):
             logger.warning(f"Intento de acceso desde IP bloqueada: {ip}")
             return JsonResponse({
@@ -110,6 +115,9 @@ class BruteForceProtectionMiddleware(MiddlewareMixin):
         
         ip = obtener_ip_cliente(request)
         
+        if not ip or ip in SAFE_IPS:
+            return None
+
         # Verificar intentos fallidos recientes
         intentos_fallidos = LoginAttempt.obtener_intentos_fallidos_recientes(
             ip, 

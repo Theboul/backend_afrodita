@@ -10,7 +10,7 @@ class ProveedorListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Proveedor
         fields = [
-            'cod_proveedor', 'nombre', 'contacto', 'telefono', 'pais', 'estado_proveedor'
+            'cod_proveedor', 'nombre', 'contacto', 'telefono', 'pais', 'tipo', 'estado_proveedor'
         ]
 
 
@@ -18,7 +18,7 @@ class ProveedorDetalleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Proveedor
         fields = [
-            'cod_proveedor', 'nombre', 'contacto', 'telefono', 'direccion', 'pais', 'estado_proveedor'
+            'cod_proveedor', 'nombre', 'contacto', 'telefono', 'direccion', 'pais', 'tipo', 'estado_proveedor'
         ]
 
 
@@ -26,7 +26,7 @@ class CrearProveedorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Proveedor
         fields = [
-            'cod_proveedor', 'nombre', 'contacto', 'telefono', 'direccion', 'pais', 'estado_proveedor'
+            'cod_proveedor', 'nombre', 'contacto', 'telefono', 'direccion', 'pais', 'tipo', 'estado_proveedor'
         ]
 
     def validate_cod_proveedor(self, value):
@@ -55,7 +55,7 @@ class ActualizarProveedorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Proveedor
         fields = [
-            'nombre', 'contacto', 'telefono', 'direccion', 'pais'
+            'nombre', 'contacto', 'telefono', 'direccion', 'pais', 'tipo'
         ]
 
     def update(self, instance, validated_data):
